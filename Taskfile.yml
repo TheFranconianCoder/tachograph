@@ -1,0 +1,95 @@
+# https://taskfile.dev
+
+version: "3"
+
+# CGO-free end to end: no WebView, no native window toolkit beyond the tray.
+env:
+  CGO_ENABLED: "0"
+
+tasks:
+  build:
+    desc: Build the static binary with the UI embedded
+    deps: [web:build]
+    cmd: go build -o dist/tachograph ./cmd/tachograph
+
+  run:
+    desc: Run the desktop app (tray + local service)
+    deps: [web:build]
+    cmd: go run ./cmd/tachograph app
+
+  run:debug:
+    desc: Run the desktop app with writing git commands logged
+    deps: [web:build]
+    cmd: go run ./cmd/tachograph app --debug
+
+  run:headless:
+    desc: Run the service without a tray (development, CI, headless hosts)
+    deps: [web:build]
+    cmd: go run ./cmd/tachograph app --headless --no-open
+
+  web:install:
+    desc: Install the PWA toolchain (pnpm)
+    dir: web
+    cmd: pnpm install --frozen-lockfile
+
+  icons:
+    desc: Render the app icons (squircle) from web/icons/pictogram.svg
+    dir: web
+    cmd: node scripts/render-icons.mjs
+    sources:
+      - web/icons/pictogram.svg
+      - web/scripts/render-icons.mjs
+    generates:
+      - web/public/icon.svg
+      - web/public/icon-192.png
+      - web/public/icon-512.png
+      - web/public/icon-maskable-512.png
+      - web/public/apple-touch-icon.png
+      - internal/app/icon.png
+
+  web:build:
+    desc: Build the PWA into internal/web/dist (embedded by go:embed)
+    dir: web
+    cmds:
+      - pnpm install --frozen-lockfile
+      - node scripts/render-icons.mjs
+      - pnpm run build
+      # Vite empties the output dir; keep the placeholder that lets `go build`
+      # succeed on a fresh checkout without Node.
+      - touch ../internal/web/dist/.gitkeep
+    sources:
+      - web/src/**/*
+      - web/index.html
+      - web/vite.config.ts
+      - web/tsconfig.json
+      - web/package.json
+      - web/pnpm-lock.yaml
+      - web/icons/pictogram.svg
+      - web/scripts/render-icons.mjs
+      - web/public/manifest.webmanifest
+    generates:
+      - internal/web/dist/index.html
+      - web/public/icon.svg
+      - web/public/icon-192.png
+      - web/public/icon-512.png
+      - web/public/icon-maskable-512.png
+      - web/public/apple-touch-icon.png
+      - internal/app/icon.png
+
+  web:dev:
+    desc: Run the PWA's Vite dev server (proxies /api to the running app)
+    dir: web
+    cmd: pnpm run dev
+
+  web:check:
+    desc: Type-check the PWA
+    dir: web
+    cmd: pnpm run check
+
+  format:
+    desc: Format Go code
+    cmd: gofmt -w .
+
+  test:
+    desc: Run the Go tests
+    cmd: go test ./...

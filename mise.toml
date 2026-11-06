@@ -1,0 +1,3 @@
+[tools]
+difftastic = "0.72.0"
+watchexec = "2.8.0"

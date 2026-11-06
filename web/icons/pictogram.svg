@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Tachograph pictogram">
+  <rect width="512" height="512" fill="#0b0f14" />
+  <circle cx="256" cy="256" r="170" fill="none" stroke="#d1d5db" stroke-width="14" />
+  <circle cx="256" cy="256" r="148" fill="none" stroke="#d1d5db" stroke-width="14" stroke-dasharray="2 32" stroke-linecap="round" />
+  <g fill="none" stroke="#d1d5db" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M139 337C177 321 213 291 256 256" />
+    <path d="M256 256C291 282 319 303 355 324" />
+  </g>
+  <path d="M256 256C288 225 315 206 350 191" fill="none" stroke="#f97316" stroke-width="14" stroke-linecap="round" />
+  <g fill="#d1d5db">
+    <circle cx="256" cy="256" r="18" />
+    <circle cx="355" cy="324" r="13" />
+  </g>
+  <circle cx="350" cy="191" r="13" fill="#f97316" />
+</svg>

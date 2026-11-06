@@ -1,0 +1,75 @@
+server:
+  port: 9211
+ui:
+  open: true
+# Check and refresh a per-user login entry on every start. It starts the app
+# without opening the UI; failures are logged and never keep the app from
+# running.
+autostart: false
+watcher:
+  # auto: use watchexec when it is installed, poll otherwise.
+  # watchexec: require watchexec (the app refuses to start without it).
+  # poll: never start watchexec.
+  engine: auto
+  # Optional explicit path; otherwise PATH and mise installations are searched.
+  # watchexecPath: /home/you/.local/bin/watchexec
+  # watchexec debounce before a snapshot is triggered.
+  debounceMs: 1500
+  # Polling is the fallback and the liveness check behind watchexec.
+  # Active worktrees poll at the minimum, idle ones back off to the maximum.
+  pollIntervalMs: 10000
+  pollIntervalMaxMs: 120000
+  # Stop a project's watcher after this much silence and return to polling.
+  # The next poll detects a change and starts the watcher again. 0 disables it.
+  hibernateAfterMs: 300000
+  workers: 4
+  ignore:
+    - .git
+    - node_modules
+    - dist
+    - build
+    - .cache
+history:
+  # Where the Git-backed history stores live.
+  # Default: $XDG_DATA_HOME/tachograph/history (or ~/.local/share/tachograph/history)
+  root: ''
+  # Thin old snapshots and pack the history repositories.
+  compaction:
+    enabled: true
+    interval: 1h
+    autoGc: true
+    keepMinimum: 50
+    keepAllFor: 24h      # every snapshot
+    hourlyFor: 168h      # one per hour, then
+    dailyFor: 720h       # one per day, then
+    maxAge: 2160h        # one per week up to 90 days; 0 = keep forever
+    archive: true        # keep the state before the retained window
+diff:
+  # Render snapshot patches with difftastic when it is installed.
+  # auto: difftastic when found, git otherwise.
+  # git: always use git's unified diff.
+  # difft: prefer difftastic; falls back to git when it is not available.
+  tool: auto
+  # Optional explicit difftastic binary; otherwise PATH and mise are searched.
+  # path: /home/you/.local/bin/difft
+worktrees:
+  # Globs for worktrees whose main repository is outside the roots.
+  # Absolute paths or paths starting with ~; * ? [] are supported.
+  # patterns:
+  #   - ~/worktrees/*
+  # Run once when a worktree is discovered, before the first snapshot.
+  on_create:
+    - copy:
+        path: .env
+        optional: true
+    - copy:
+        path: .env.local
+        optional: true
+    - copy:
+        path: .env.*.local
+        optional: true
+    # - run:
+    #     command: task setup
+    #     only_if: Taskfile.yml
+    #     timeout: 5m
+roots: []
