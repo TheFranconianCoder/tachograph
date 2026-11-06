@@ -384,7 +384,7 @@ roots:
 - The UI shows the timeline per worktree, filters it by file, shows a read-only snapshot diff and
   restores a file or directory from any snapshot.
 
-The product plan lives at [`.opencode/plans/tachograph.md`](.opencode/plans/tachograph.md).
+The product plan lives at [`docs/plans/tachograph.md`](docs/plans/tachograph.md).
 
 ---
 
