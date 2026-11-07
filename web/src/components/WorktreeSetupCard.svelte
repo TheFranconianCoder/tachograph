@@ -98,11 +98,12 @@
     }
 </script>
 
-<section class="panel">
-    <div class="panel-head">
-        <h2>Worktree setup</h2>
+<details class="panel panel--collapsible">
+    <summary class="panel-head">
+        <span class="panel-title">Worktree setup</span>
         <span class="count">{patterns.length} copies</span>
-    </div>
+        <Icon name="chevron" size={14} class="panel-caret" />
+    </summary>
     <div class="panel-body">
         <p class="muted setup-hint">
             Files copied from the main worktree into every new worktree. Patterns are relative and
@@ -195,7 +196,7 @@
             </p>
         {/if}
     </div>
-</section>
+</details>
 
 <style>
     .setup-hint {

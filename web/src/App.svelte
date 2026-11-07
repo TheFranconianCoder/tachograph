@@ -350,46 +350,45 @@
 
         <div class="content">
             <section class="grid">
-            <StatusCard
-                {status}
-                {connection}
-                {connectionTitle}
-                {uptime}
-                {totalSnapshots}
-                {worktreeCount}
-                projectCount={projects.length}
-                rootsCount={roots.length}
-                {lastSnapshotAt}
-                {lastScanAt}
-                {now}
-                {busy}
-                onToggleRecording={toggleRecording}
-                onToggleAutostart={toggleAutostart}
-            />
-            <RootsCard
-                {roots}
-                patterns={status?.worktreePatterns ?? []}
-                {busy}
-                scanning={status?.scanning ?? false}
-                bind:rootInput
-                bind:patternInput
-                {actionError}
-                scanError={status?.scanError ?? null}
-                onAdd={addRoot}
-                onRemove={removeRoot}
-                onAddPattern={addPattern}
-                onRemovePattern={removePattern}
-                onScan={scanNow}
-            />
-        </section>
-
-        <section class="section">
-            <WorktreeSetupCard
-                setup={status?.worktreeSetup ?? null}
-                onSave={saveWorktreeSetup}
-                onApply={applyWorktreeSetup}
-            />
-        </section>
+                <StatusCard
+                    {status}
+                    {connection}
+                    {connectionTitle}
+                    {uptime}
+                    {totalSnapshots}
+                    {worktreeCount}
+                    projectCount={projects.length}
+                    rootsCount={roots.length}
+                    {lastSnapshotAt}
+                    {lastScanAt}
+                    {now}
+                    {busy}
+                    onToggleRecording={toggleRecording}
+                    onToggleAutostart={toggleAutostart}
+                />
+                <div class="column-stack">
+                    <RootsCard
+                        {roots}
+                        patterns={status?.worktreePatterns ?? []}
+                        {busy}
+                        scanning={status?.scanning ?? false}
+                        bind:rootInput
+                        bind:patternInput
+                        {actionError}
+                        scanError={status?.scanError ?? null}
+                        onAdd={addRoot}
+                        onRemove={removeRoot}
+                        onAddPattern={addPattern}
+                        onRemovePattern={removePattern}
+                        onScan={scanNow}
+                    />
+                    <WorktreeSetupCard
+                        setup={status?.worktreeSetup ?? null}
+                        onSave={saveWorktreeSetup}
+                        onApply={applyWorktreeSetup}
+                    />
+                </div>
+            </section>
 
         <section class="section">
             <div class="section-head">

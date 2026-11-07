@@ -114,38 +114,44 @@
             </span>
         </div>
 
-        <div class="kv-list">
-            <div class="kv"><span class="k">Version</span><span class="v">{status?.version ?? '—'}</span></div>
-            <div class="kv"><span class="k">Uptime</span><span class="v">{uptime}</span></div>
-            <div class="kv">
-                <span class="k">Recording</span>
-                <span class="v" class:off={!status?.recording}>
-                    {status?.paused ? 'paused' : status?.recording ? 'on' : 'off'}
-                </span>
+        <details class="details-block">
+            <summary class="details-summary">
+                <span>Details</span>
+                <Icon name="chevron" size={13} class="panel-caret" />
+            </summary>
+            <div class="kv-list">
+                <div class="kv"><span class="k">Version</span><span class="v">{status?.version ?? '—'}</span></div>
+                <div class="kv"><span class="k">Uptime</span><span class="v">{uptime}</span></div>
+                <div class="kv">
+                    <span class="k">Recording</span>
+                    <span class="v" class:off={!status?.recording}>
+                        {status?.paused ? 'paused' : status?.recording ? 'on' : 'off'}
+                    </span>
+                </div>
+                <div class="kv">
+                    <span class="k">Watcher</span>
+                    <span
+                        class="v"
+                        title={status?.watcherEngine === 'watchexec'
+                            ? 'watchexec events, polling as fallback'
+                            : 'polling only (watchexec not available)'}
+                    >
+                        {status?.watcherEngine === 'watchexec' ? 'watchexec' : 'poll'}
+                    </span>
+                </div>
+                <div class="kv">
+                    <span class="k">Diff</span>
+                    <span class="v" title={diffTitle}>{diffLabel}</span>
+                </div>
+                <div class="kv"><span class="k">Roots</span><span class="v">{rootsCount}</span></div>
+                <div class="kv">
+                    <span class="k">Last scan</span>
+                    <span class="v" title={absoluteTime(lastScanAt)}>
+                        {lastScanAt ? relativeTime(lastScanAt, now) : 'never'}
+                    </span>
+                </div>
             </div>
-            <div class="kv">
-                <span class="k">Watcher</span>
-                <span
-                    class="v"
-                    title={status?.watcherEngine === 'watchexec'
-                        ? 'watchexec events, polling as fallback'
-                        : 'polling only (watchexec not available)'}
-                >
-                    {status?.watcherEngine === 'watchexec' ? 'watchexec' : 'poll'}
-                </span>
-            </div>
-            <div class="kv">
-                <span class="k">Diff</span>
-                <span class="v" title={diffTitle}>{diffLabel}</span>
-            </div>
-            <div class="kv"><span class="k">Roots</span><span class="v">{rootsCount}</span></div>
-            <div class="kv">
-                <span class="k">Last scan</span>
-                <span class="v" title={absoluteTime(lastScanAt)}>
-                    {lastScanAt ? relativeTime(lastScanAt, now) : 'never'}
-                </span>
-            </div>
-        </div>
+        </details>
 
         <button
             type="button"
@@ -171,6 +177,39 @@
 </section>
 
 <style>
+    .details-block {
+        margin-top: 13px;
+    }
+
+    .details-summary {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 0;
+        list-style: none;
+        color: var(--muted);
+        font-size: 11.5px;
+        font-weight: 550;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .details-summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .details-summary::marker {
+        content: '';
+    }
+
+    .details-summary:hover {
+        color: var(--ink);
+    }
+
+    .details-block[open] .details-summary {
+        margin-bottom: 4px;
+    }
+
     .state-strip {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));

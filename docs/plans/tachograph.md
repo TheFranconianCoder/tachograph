@@ -296,8 +296,8 @@ detection and project-repository isolation.
 - Activity feed for recent snapshots/errors; copy buttons for the history repo, snapshot worktree and
   real worktree paths.
 - Projects in a single column, newest change first, with a text filter; the main worktree is pinned
-  to the top of each project and the rest is alphabetical. The worktree lifecycle signal is a
-  traffic-light dot (setup applied / failed / none).
+  to the top of each project and the rest is ordered by activity, newest snapshot first. The worktree
+  lifecycle signal is a traffic-light dot (setup applied / failed / none).
 - `--debug` logs durable writing git commands; no-op staging, reads and diffs stay out of the log.
 - Deleted worktrees are detected on the next scan; placeholder, snapshot branch and activity entry are
   removed, and the project store disappears when it was the last worktree. Stale `git worktree list`

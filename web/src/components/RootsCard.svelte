@@ -44,11 +44,12 @@
     }
 </script>
 
-<section class="panel">
-    <div class="panel-head">
-        <h2>Roots</h2>
+<details class="panel panel--collapsible">
+    <summary class="panel-head">
+        <span class="panel-title">Roots</span>
         <span class="count">{roots.length}</span>
-    </div>
+        <Icon name="chevron" size={14} class="panel-caret" />
+    </summary>
     <div class="panel-body">
         {#if roots.length === 0}
             <p class="muted root-hint">
@@ -166,7 +167,7 @@
             <p class="notice notice--error root-notice">{scanError}</p>
         {/if}
     </div>
-</section>
+</details>
 
 <style>
     .pattern-block {

@@ -67,8 +67,8 @@ func (a *App) projectsSnapshot() []ProjectStatus {
 	}
 
 	// Projects are ordered by activity: the newest snapshot first. Inside a
-	// project the main worktree is pinned to the top, the others follow
-	// alphabetically by directory name.
+	// project the main worktree is pinned to the top, the others follow by
+	// activity: the newest snapshot first.
 	for i := range projects {
 		projects[i].LastChange = newestSnapshot(projects[i].Worktrees)
 		sortWorktrees(projects[i].Worktrees, projects[i].MainWorktree)
@@ -89,7 +89,8 @@ func (a *App) projectsSnapshot() []ProjectStatus {
 }
 
 // sortWorktrees pins the main worktree to the first position and orders the
-// remaining worktrees by directory name, case-insensitively.
+// remaining worktrees by activity: the newest snapshot first. Worktrees
+// without a snapshot follow the active ones, alphabetically by directory name.
 func sortWorktrees(worktrees []WorktreeStatus, mainWorktree string) {
 	sort.SliceStable(worktrees, func(left, right int) bool {
 		a := worktrees[left]
@@ -98,6 +99,11 @@ func sortWorktrees(worktrees []WorktreeStatus, mainWorktree string) {
 		bMain := samePath(b.Path, mainWorktree)
 		if aMain != bMain {
 			return aMain
+		}
+		aTime := snapshotTime(a.LastSnapshot)
+		bTime := snapshotTime(b.LastSnapshot)
+		if !aTime.Equal(bTime) {
+			return aTime.After(bTime)
 		}
 		aName := strings.ToLower(filepath.Base(a.Path))
 		bName := strings.ToLower(filepath.Base(b.Path))
