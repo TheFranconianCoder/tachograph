@@ -24,7 +24,8 @@ const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = path.resolve(WEB, '..');
 const PUBLIC = path.join(WEB, 'public');
 const PICTOGRAM = path.join(WEB, 'icons', 'pictogram.svg');
-const TRAY_ICON = path.join(REPO, 'internal', 'app', 'icon.png');
+const APP_DIR = path.join(REPO, 'internal', 'app');
+const TRAY_ICON = path.join(APP_DIR, 'icon.png');
 
 /** The icon canvas. Every asset is derived from it, so the geometry below is size-independent. */
 const SIZE = 512;
@@ -42,6 +43,13 @@ const TRAY_STROKE = 16;
 const TRAY_NODE_RADIUS = 15;
 const TRAY_CENTER_RADIUS = 21;
 const TRAY_TICK_DASH = '6 26';
+/** The tray badge carries the recorder state. The colors are the dark-theme UI accents;
+ *  the graphite tile is the backdrop, so they stay readable on any panel. */
+const TRAY_STATES = {
+	idle: '#94a3b8',
+	polling: '#60a5fa',
+	watching: '#4ade80',
+};
 
 const sharp = require('sharp');
 
@@ -112,6 +120,13 @@ function tinySvg(markup) {
 	return appIconSvg(thick);
 }
 
+/** statusTraySvg adds the recorder-state badge to the lower-right corner. The dark outline
+ *  separates it from the dial and keeps the dot readable when the icon is scaled down. */
+function statusTraySvg(markup, accent) {
+	const badge = `<circle cx="400" cy="400" r="56" fill="${accent}" stroke="${BACKGROUND}" stroke-width="24" />`;
+	return tinySvg(`${markup.trimEnd()}\n${badge}`);
+}
+
 async function png(svg, size, { alpha }) {
 	const image = sharp(Buffer.from(svg), { density: 384 }).resize(size, size, { fit: 'fill' });
 	return (alpha ? image : image.flatten({ background: BACKGROUND })).png({ compressionLevel: 9 }).toBuffer();
@@ -137,6 +152,9 @@ const main = async () => {
 	// square and applies its own squircle.
 	await write(path.join(PUBLIC, 'apple-touch-icon.png'), await png(fullBleedSvg(mark), 180, { alpha: false }));
 	await write(TRAY_ICON, await png(tinySvg(mark), 32, { alpha: true }));
+	for (const [state, accent] of Object.entries(TRAY_STATES)) {
+		await write(path.join(APP_DIR, `icon-${state}.png`), await png(statusTraySvg(mark, accent), 32, { alpha: true }));
+	}
 
 	let changed = 0;
 	for (const { target, data } of outputs) {

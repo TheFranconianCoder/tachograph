@@ -21,9 +21,10 @@ func (a *App) statusEvent() ([]byte, error) {
 	})
 }
 
-// notifyStatus schedules a coalesced status frame. A scan that snapshots twenty
-// worktrees produces one frame, not twenty.
+// notifyStatus updates the tray and schedules a coalesced status frame. A scan
+// that snapshots twenty worktrees produces one frame, not twenty.
 func (a *App) notifyStatus() {
+	a.refreshTray()
 	if a.hub == nil || a.hub.Subscribers() == 0 {
 		return
 	}

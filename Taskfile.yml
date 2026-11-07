@@ -46,6 +46,9 @@ tasks:
       - web/public/icon-maskable-512.png
       - web/public/apple-touch-icon.png
       - internal/app/icon.png
+      - internal/app/icon-idle.png
+      - internal/app/icon-polling.png
+      - internal/app/icon-watching.png
 
   web:build:
     desc: Build the PWA into internal/web/dist (embedded by go:embed)
@@ -75,6 +78,9 @@ tasks:
       - web/public/icon-maskable-512.png
       - web/public/apple-touch-icon.png
       - internal/app/icon.png
+      - internal/app/icon-idle.png
+      - internal/app/icon-polling.png
+      - internal/app/icon-watching.png
 
   web:dev:
     desc: Run the PWA's Vite dev server (proxies /api to the running app)

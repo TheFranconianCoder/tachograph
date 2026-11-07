@@ -2,12 +2,28 @@ package app
 
 import _ "embed"
 
-// trayIconPNG is the Tachograph pictogram rendered to a small PNG for the tray.
-// The source of truth is design/pictograms/tachograph.svg in the studio-page
-// repository; the raster is regenerated from it.
+// The tray icon carries the recorder state as a badge in its lower-right
+// corner. The source of truth is design/pictograms/tachograph.svg in the
+// studio-page repository; the rasters are regenerated from it by
+// web/scripts/render-icons.mjs.
 //
-//go:embed icon.png
-var trayIconPNG []byte
+//go:embed icon-idle.png
+var trayIconIdlePNG []byte
 
-// trayIcon returns the tray icon bytes.
-func trayIcon() []byte { return trayIconPNG }
+//go:embed icon-polling.png
+var trayIconPollingPNG []byte
+
+//go:embed icon-watching.png
+var trayIconWatchingPNG []byte
+
+// trayIcon returns the icon bytes for a recorder state.
+func trayStateIcon(state string) []byte {
+	switch state {
+	case trayStateWatching:
+		return trayIconWatchingPNG
+	case trayStatePolling:
+		return trayIconPollingPNG
+	default:
+		return trayIconIdlePNG
+	}
+}

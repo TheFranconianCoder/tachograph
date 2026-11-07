@@ -47,6 +47,7 @@ type App struct {
 	supervisor   *recorder.Supervisor
 	watchers     *watcher.Manager
 	hub          *stream.Hub
+	tray         *trayIcon
 
 	statusMu    sync.Mutex
 	statusTimer *time.Timer
@@ -112,6 +113,7 @@ func New(cfg Config, cfgPath string, opts Options, log *slog.Logger) (*App, erro
 		opts:         opts,
 		historyStore: historyStore,
 		hub:          stream.NewHub(),
+		tray:         &trayIcon{},
 		projects:     []ProjectStatus{},
 		quit:         make(chan struct{}),
 		activity:     activityMap(persistedActivity),
@@ -624,10 +626,12 @@ func (a *App) toggleRecording() {
 	if a.supervisor.Paused() {
 		a.supervisor.Resume()
 		a.log.Info("recording resumed")
+		a.notifyStatus()
 		return
 	}
 	a.supervisor.Pause()
 	a.log.Info("recording paused")
+	a.notifyStatus()
 }
 
 // requestQuit closes the quit channel exactly once.

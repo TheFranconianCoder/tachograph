@@ -354,6 +354,10 @@ task icons   # regenerate the PWA icons and the tray icon
 
 The studio pictogram in the Codebook stays square by design; only the app/tray icon is reframed.
 
+The tray icon carries the aggregate recorder state as a colored badge: gray for **idle** (nothing
+is live or recording is paused), blue for **polling**, and green for **watching** (watchexec is
+live). Watching wins over polling when worktrees are in both states.
+
 ---
 
 ## Configuration
