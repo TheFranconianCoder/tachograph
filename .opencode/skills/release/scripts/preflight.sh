@@ -55,11 +55,20 @@ if [ -n "$version" ]; then
         fail "tag $tag already exists locally"
     fi
 
-    if ! remote_tags="$(git ls-remote --tags --refs origin "refs/tags/$tag" 2>&1)"; then
-        printf '%s\n' "$remote_tags" >&2
+    if ! repo="$("${MISE[@]}" gh repo view --json nameWithOwner --jq .nameWithOwner 2>&1)"; then
+        printf '%s\n' "$repo" >&2
+        fail "cannot resolve the repository from gh"
+    fi
+    # The remote tag check goes through the gh API instead of `git ls-remote`: the release already
+    # publishes with gh over HTTPS, and a sandbox or a network that blocks the SSH transport must
+    # not fail the preflight.
+    if ! remote_refs="$("${MISE[@]}" gh api "repos/$repo/git/matching-refs/tags/$tag" --jq '.[].ref' 2>&1)"; then
+        printf '%s\n' "$remote_refs" >&2
         fail "cannot read tags from origin"
     fi
-    [ -z "$remote_tags" ] || fail "tag $tag already exists on origin"
+    if printf '%s\n' "$remote_refs" | grep -qxF "refs/tags/$tag"; then
+        fail "tag $tag already exists on origin"
+    fi
 
     printf '  version:   %s (free)\n' "$tag"
 fi

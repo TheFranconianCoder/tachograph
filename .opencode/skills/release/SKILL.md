@@ -25,8 +25,9 @@ From the repository root:
 .opencode/skills/release/scripts/changes.sh
 ```
 
-`preflight.sh` reports branch, tree, authentication and the last tag; it exits non-zero and names
-what is missing. `changes.sh` prints the commit range since the last tag and the commit subjects.
+`preflight.sh` reports branch, tree, authentication and the last tag; the remote tag check goes
+through the `gh` API, so it does not depend on the Git transport. It exits non-zero and names what
+is missing. `changes.sh` prints the commit range since the last tag and the commit subjects.
 
 Before publishing, run the checks the release script does not run:
 
