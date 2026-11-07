@@ -6,13 +6,13 @@ export const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? p
 export const shortHash = (hash: string, length = 12): string =>
     hash.length > length ? hash.slice(0, length) : hash;
 
-/** Compact line counts for dense tables, e.g. "+12 -4". */
-export const changeSummary = (stats: ChangeStats): string => `+${stats.added} -${stats.deleted}`;
+/** Formats a count with the user's thousands separator. */
+export const formatCount = (value: number): string => value.toLocaleString();
 
 /** Human-readable form of the same counts for tooltips. */
 export const changeTitle = (stats: ChangeStats): string =>
-    `${stats.files} ${stats.files === 1 ? 'file' : 'files'} changed, ` +
-    `+${stats.added} -${stats.deleted}`;
+    `${formatCount(stats.files)} ${stats.files === 1 ? 'file' : 'files'} changed, ` +
+    `+${formatCount(stats.added)} -${formatCount(stats.deleted)}`;
 
 export const absoluteTime = (value?: string): string =>
     value ? new Date(value).toLocaleString() : '—';

@@ -1131,12 +1131,43 @@ details[open] > summary .panel-caret {
     width: 6rem;
 }
 
+/* The worktree text fills the row up to the right-aligned details. */
 .activity-col-worktree {
-    width: 18rem;
+    width: auto;
 }
 
 .activity-col-details {
-    width: 14rem;
+    width: 15rem;
+}
+
+.activity-table th:nth-child(4) {
+    text-align: right;
+}
+
+.activity-table td.activity-main-cell {
+    max-width: none;
+    padding: 0;
+}
+
+.activity-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: baseline;
+    padding: 8px 12px;
+}
+
+.activity-worktree-cell {
+    display: block;
+}
+
+.activity-details {
+    max-width: 60%;
+    overflow: hidden;
+    color: var(--ink-2);
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .activity-worktree {
@@ -1163,6 +1194,18 @@ details[open] > summary .panel-caret {
     border-radius: 3px;
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+}
+
+.activity-sep {
+    color: var(--faint);
+}
+
+.activity-added {
+    color: var(--success);
+}
+
+.activity-deleted {
+    color: var(--danger);
 }
 
 .event {
