@@ -128,9 +128,24 @@
         return null;
     });
 
+    const worktreeIDs = $derived.by(() => {
+        const ids = new Map<string, string>();
+        for (const project of projects) {
+            for (const worktree of project.worktrees) {
+                if (worktree.id) ids.set(worktree.path, worktree.id);
+            }
+        }
+        return ids;
+    });
+
     function openTimeline(worktree: Worktree): void {
         if (!worktree.id) return;
         navigate(timelineURL(worktree.id));
+    }
+
+    function openActivityTimeline(path: string): void {
+        const id = worktreeIDs.get(path);
+        if (id) navigate(timelineURL(id));
     }
 
     function selectSnapshot(hash: string | null): void {
@@ -402,7 +417,12 @@
                     text="Existing snapshots are shown in the project cards; new snapshots and errors appear here."
                 />
             {:else}
-                <ActivityTable {activities} {now} />
+                <ActivityTable
+                    {activities}
+                    {now}
+                    {worktreeIDs}
+                    onOpenTimeline={openActivityTimeline}
+                />
             {/if}
         </section>
 

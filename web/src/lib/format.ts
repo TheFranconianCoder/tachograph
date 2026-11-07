@@ -2,6 +2,10 @@ import type { Worktree } from './types';
 
 export const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
 
+/** Shortens a commit hash for dense tables; the full value stays in the title. */
+export const shortHash = (hash: string, length = 12): string =>
+    hash.length > length ? hash.slice(0, length) : hash;
+
 export const absoluteTime = (value?: string): string =>
     value ? new Date(value).toLocaleString() : '—';
 
