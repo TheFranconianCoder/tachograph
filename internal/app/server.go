@@ -59,7 +59,7 @@ func (a *App) status() Status {
 	}
 	diffTool := "git"
 	if a.historyStore != nil && a.historyStore.Diff.Enabled() {
-		diffTool = "difft"
+		diffTool = a.historyStore.Diff.Name
 	}
 
 	return Status{
@@ -294,7 +294,8 @@ func (a *App) handleRange(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	detail, err := recorder.RangeDetail(r.Context(), from, to, file)
+	ctx := history.WithDiffTheme(r.Context(), r.URL.Query().Get("theme"))
+	detail, err := recorder.RangeDetail(ctx, from, to, file)
 	if errors.Is(err, history.ErrSnapshotNotFound) {
 		writeError(w, http.StatusNotFound, "snapshot not found; it may have been compacted away")
 		return
@@ -393,7 +394,8 @@ func (a *App) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	detail, err := recorder.SnapshotDetail(r.Context(), hash, file)
+	ctx := history.WithDiffTheme(r.Context(), r.URL.Query().Get("theme"))
+	detail, err := recorder.SnapshotDetail(ctx, hash, file)
 	if errors.Is(err, history.ErrSnapshotNotFound) {
 		writeError(w, http.StatusNotFound, "snapshot not found; it may have been compacted away")
 		return

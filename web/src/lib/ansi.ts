@@ -1,15 +1,19 @@
-// Minimal ANSI SGR parser for difftastic's coloured inline diff. Only the
-// sequences difftastic emits are mapped; every other escape is dropped so no
-// control bytes reach the DOM.
+// Minimal ANSI SGR parser for the colored diff renderers. Basic colors map
+// onto the theme palette; 256-color and truecolor values are preserved as
+// inline styles so delta's syntax highlighting survives. Every other escape is
+// dropped so no control bytes reach the DOM.
 
 export interface AnsiToken {
     text: string;
     className: string;
+    style?: string;
 }
 
 interface AnsiStyle {
     fg: string;
     bg: string;
+    fgColor: string;
+    bgColor: string;
     bold: boolean;
     dim: boolean;
     italic: boolean;
@@ -54,6 +58,25 @@ const background: Record<number, string> = {
     107: 'white',
 };
 
+const basicPalette = [
+    '#000000',
+    '#800000',
+    '#008000',
+    '#808000',
+    '#000080',
+    '#800080',
+    '#008080',
+    '#c0c0c0',
+    '#808080',
+    '#ff0000',
+    '#00ff00',
+    '#ffff00',
+    '#0000ff',
+    '#ff00ff',
+    '#00ffff',
+    '#ffffff',
+];
+
 const escapePattern = /\x1b\[([0-9;]*)m|\x1b\[[0-9;?]*[ -/]*[@-~]/g;
 
 export function parseAnsiLine(line: string): AnsiToken[] {
@@ -76,12 +99,23 @@ export function parseAnsiLine(line: string): AnsiToken[] {
 }
 
 function emptyStyle(): AnsiStyle {
-    return { fg: '', bg: '', bold: false, dim: false, italic: false, underline: false };
+    return {
+        fg: '',
+        bg: '',
+        fgColor: '',
+        bgColor: '',
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: false,
+    };
 }
 
 function reset(style: AnsiStyle): void {
     style.fg = '';
     style.bg = '';
+    style.fgColor = '';
+    style.bgColor = '';
     style.bold = false;
     style.dim = false;
     style.italic = false;
@@ -95,10 +129,30 @@ function applySgr(style: AnsiStyle, params: string): void {
         if (!Number.isFinite(code)) continue;
 
         if (code === 38 || code === 48) {
-            // Extended colour: skip its mode and values. The palette stays
-            // theme-driven instead of trusting arbitrary RGB values.
             const mode = codes[index + 1];
-            index += mode === 5 ? 2 : mode === 2 ? 4 : 1;
+            if (mode === 5) {
+                const color = xtermColor(codes[index + 2]);
+                if (code === 38) {
+                    style.fg = '';
+                    style.fgColor = color;
+                } else {
+                    style.bg = '';
+                    style.bgColor = color;
+                }
+                index += 2;
+            } else if (mode === 2) {
+                const color = rgbColor(codes[index + 2], codes[index + 3], codes[index + 4]);
+                if (code === 38) {
+                    style.fg = '';
+                    style.fgColor = color;
+                } else {
+                    style.bg = '';
+                    style.bgColor = color;
+                }
+                index += 4;
+            } else {
+                index += 1;
+            }
             continue;
         }
 
@@ -121,12 +175,16 @@ function applySgr(style: AnsiStyle, params: string): void {
             style.underline = false;
         } else if (code === 39) {
             style.fg = '';
+            style.fgColor = '';
         } else if (code === 49) {
             style.bg = '';
+            style.bgColor = '';
         } else if (foreground[code]) {
             style.fg = foreground[code];
+            style.fgColor = '';
         } else if (background[code]) {
             style.bg = background[code];
+            style.bgColor = '';
         }
     }
 }
@@ -134,11 +192,12 @@ function applySgr(style: AnsiStyle, params: string): void {
 function append(tokens: AnsiToken[], text: string, style: AnsiStyle): void {
     if (!text) return;
     const className = classNameOf(style);
+    const inline = styleOf(style);
     const previous = tokens[tokens.length - 1];
-    if (previous && previous.className === className) {
+    if (previous && previous.className === className && (previous.style ?? '') === inline) {
         previous.text += text;
     } else {
-        tokens.push({ text, className });
+        tokens.push({ text, className, style: inline || undefined });
     }
 }
 
@@ -151,4 +210,32 @@ function classNameOf(style: AnsiStyle): string {
     if (style.italic) classes.push('ansi-italic');
     if (style.underline) classes.push('ansi-underline');
     return classes.join(' ');
+}
+
+function styleOf(style: AnsiStyle): string {
+    const parts: string[] = [];
+    if (style.fgColor) parts.push(`color: ${style.fgColor}`);
+    if (style.bgColor) parts.push(`background-color: ${style.bgColor}`);
+    return parts.join('; ');
+}
+
+function xtermColor(index: number): string {
+    if (!Number.isFinite(index) || index < 0 || index > 255) return '';
+    if (index < 16) return basicPalette[index];
+    if (index < 232) {
+        const value = index - 16;
+        const red = Math.floor(value / 36);
+        const green = Math.floor((value % 36) / 6);
+        const blue = value % 6;
+        const level = (channel: number): number => (channel === 0 ? 0 : 55 + channel * 40);
+        return `rgb(${level(red)} ${level(green)} ${level(blue)})`;
+    }
+    const level = 8 + (index - 232) * 10;
+    return `rgb(${level} ${level} ${level})`;
+}
+
+function rgbColor(red: number, green: number, blue: number): string {
+    const clamp = (value: number): number =>
+        Number.isFinite(value) ? Math.max(0, Math.min(255, Math.round(value))) : 0;
+    return `rgb(${clamp(red)} ${clamp(green)} ${clamp(blue)})`;
 }

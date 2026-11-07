@@ -263,6 +263,12 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, ErrNoChanges
 	}
 	stats := parseNumstat(numstat)
+	// The first snapshot copies the whole source tree. Its diffstats describe
+	// the initialization, not a change, so leave them empty.
+	if subject, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%s", "HEAD"); err == nil &&
+		strings.HasPrefix(subject, "base:") {
+		stats = nil
+	}
 
 	// The project branch or HEAD may have moved since Ensure; the snapshot
 	// message should describe the state that was actually recorded.

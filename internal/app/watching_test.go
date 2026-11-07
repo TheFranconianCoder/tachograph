@@ -1,11 +1,15 @@
 package app
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/TheFranconianCoder/tachograph/internal/history"
 	"github.com/TheFranconianCoder/tachograph/internal/recorder"
 )
 
@@ -26,6 +30,44 @@ func TestActivityKeepsNewestEventPerWorktree(t *testing.T) {
 	}
 	if got[1].Path != "/b" {
 		t.Errorf("second entry = %+v, want /b", got[1])
+	}
+}
+
+func TestActivitySnapshotDropsMainWorktreeStats(t *testing.T) {
+	base := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	stats := &history.ChangeStats{Files: 1, Added: 1, Deleted: 1}
+	a := &App{
+		activity: map[string]Activity{
+			"/main": {
+				Time:  base.Format(time.RFC3339),
+				Kind:  "snapshot",
+				Path:  "/main",
+				Stats: stats,
+			},
+			"/worktree": {
+				Time:  base.Add(time.Minute).Format(time.RFC3339),
+				Kind:  "snapshot",
+				Path:  "/worktree",
+				Stats: stats,
+			},
+		},
+		projects: []ProjectStatus{{MainWorktree: "/main"}},
+	}
+
+	got := a.activitySnapshot()
+	for _, entry := range got {
+		switch entry.Path {
+		case "/main":
+			if entry.Stats != nil {
+				t.Errorf("main worktree stats = %+v, want nil", entry.Stats)
+			}
+		case "/worktree":
+			if entry.Stats == nil {
+				t.Error("linked worktree stats missing")
+			}
+		default:
+			t.Errorf("unexpected activity path %q", entry.Path)
+		}
 	}
 }
 
@@ -63,6 +105,42 @@ func TestActivityStateRoundTrip(t *testing.T) {
 	}
 	if len(loadedActivity) != 1 || loadedActivity[0].Hash != "abc123" {
 		t.Errorf("loaded entries = %+v, want the snapshot activity", loadedActivity)
+	}
+}
+
+func TestLoadActivityStateDropsOldStats(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	path := activityStatePath()
+	if path == "" {
+		t.Fatal("activityStatePath returned an empty path")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stored := activityState{
+		Version: 2,
+		Activity: []Activity{{
+			Time:  time.Now().UTC().Format(time.RFC3339),
+			Kind:  "snapshot",
+			Path:  "/worktree",
+			Hash:  "abc123",
+			Stats: &history.ChangeStats{Files: 1, Added: 1},
+		}},
+	}
+	data, err := json.Marshal(stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, activity := loadActivityState(discardAppLogger())
+	if len(activity) != 1 {
+		t.Fatalf("loaded activity = %+v, want one entry", activity)
+	}
+	if activity[0].Stats != nil {
+		t.Errorf("loaded stats = %+v, want them cleared", activity[0].Stats)
 	}
 }
 

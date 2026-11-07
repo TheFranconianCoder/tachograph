@@ -62,9 +62,10 @@ export async function fetchRange(
     path: string,
     from: string,
     to: string,
-    file = ''
+    file = '',
+    theme = 'dark'
 ): Promise<SnapshotDetail> {
-    const params = new URLSearchParams({ path, from, to });
+    const params = new URLSearchParams({ path, from, to, theme });
     if (file) params.set('file', file);
     const response = await fetch(`/api/v1/range?${params}`, {
         headers: { accept: 'application/json' },
@@ -76,9 +77,10 @@ export async function fetchRange(
 export async function fetchSnapshot(
     path: string,
     hash: string,
-    file = ''
+    file = '',
+    theme = 'dark'
 ): Promise<SnapshotDetail> {
-    const params = new URLSearchParams({ path, hash });
+    const params = new URLSearchParams({ path, hash, theme });
     if (file) params.set('file', file);
     const response = await fetch(`/api/v1/snapshot?${params}`, {
         headers: { accept: 'application/json' },

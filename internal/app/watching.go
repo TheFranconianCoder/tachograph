@@ -18,6 +18,7 @@ const (
 	hibernateTickInterval = 15 * time.Second
 	activityMaxAge        = 30 * 24 * time.Hour
 	maxActivity           = 50
+	activityStateVersion  = 3
 )
 
 // Activity is one recent recorder event shown in the UI.
@@ -83,6 +84,18 @@ func (a *App) activitySnapshot() []Activity {
 	}
 	a.activityMu.Unlock()
 
+	mainWorktrees := a.mainWorktreePaths()
+	for i := range activity {
+		for _, main := range mainWorktrees {
+			if samePath(main, activity[i].Path) {
+				// Diffstats describe a worktree change. The main checkout is
+				// the source tree, so its activity stays without numbers.
+				activity[i].Stats = nil
+				break
+			}
+		}
+	}
+
 	sort.Slice(activity, func(left, right int) bool {
 		return activity[left].Time > activity[right].Time
 	})
@@ -90,6 +103,19 @@ func (a *App) activitySnapshot() []Activity {
 		activity = activity[:maxActivity]
 	}
 	return activity
+}
+
+// mainWorktreePaths returns the main checkout of every known project.
+func (a *App) mainWorktreePaths() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	paths := make([]string, 0, len(a.projects))
+	for _, project := range a.projects {
+		if project.MainWorktree != "" {
+			paths = append(paths, project.MainWorktree)
+		}
+	}
+	return paths
 }
 
 // observeLastSnapshot seeds the activity map from the history store. It lets
@@ -413,6 +439,14 @@ func loadActivityState(log *slog.Logger) (map[string]time.Time, []Activity) {
 		return state, activity
 	}
 
+	if stored.Version < activityStateVersion {
+		// Version 3 stopped recording diffstats for the initial source copy.
+		// Drop cached stats so old entries cannot show misleading numbers.
+		for i := range stored.Activity {
+			stored.Activity[i].Stats = nil
+		}
+	}
+
 	cutoff := time.Now().Add(-activityMaxAge)
 	for worktree, value := range stored.Worktrees {
 		parsed, err := time.Parse(time.RFC3339, value)
@@ -466,7 +500,7 @@ func (a *App) saveActivityState() {
 	}
 	cutoff := time.Now().Add(-activityMaxAge)
 	stored := activityState{
-		Version:   2,
+		Version:   activityStateVersion,
 		Worktrees: make(map[string]string, len(a.lastActive)),
 	}
 	for path, at := range a.lastActive {

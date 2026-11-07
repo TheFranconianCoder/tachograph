@@ -1,5 +1,6 @@
-// Package difft resolves the optional difftastic binary that renders snapshot
-// patches. When it is absent, Tachograph falls back to Git's unified diff.
+// Package difft resolves the optional delta or difftastic binary that renders
+// snapshot patches. When neither is present, Tachograph falls back to Git's
+// unified diff.
 package difft
 
 import (
@@ -15,6 +16,12 @@ const (
 	ModeAuto  = "auto"
 	ModeGit   = "git"
 	ModeDifft = "difft"
+	ModeDelta = "delta"
+)
+
+var (
+	deltaNames = []string{"delta", "git-delta"}
+	difftNames = []string{"difft", "difftastic"}
 )
 
 // Tool identifies the renderer for snapshot patches. An empty Path means Git's
@@ -24,43 +31,59 @@ type Tool struct {
 	Path string
 }
 
-// Enabled reports whether the structural diff renderer is available.
+// Enabled reports whether an external diff renderer is available.
 func (t Tool) Enabled() bool {
-	return t.Name == ModeDifft && t.Path != ""
+	return t.Path != "" && (t.Name == ModeDifft || t.Name == ModeDelta)
 }
 
-// Resolve picks the renderer. An explicit path or name wins, then PATH, then a
-// mise installation or the common cargo/local bin locations.
+// Resolve picks the renderer. Delta has priority in auto mode, then difftastic.
+// An explicit path or name wins, then PATH, then a mise installation or the
+// common cargo/local bin locations.
 func Resolve(mode, configured string) Tool {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case ModeGit:
 		return Tool{Name: ModeGit}
+	case ModeDelta:
+		if path := find(configured, deltaNames); path != "" {
+			return Tool{Name: ModeDelta, Path: path}
+		}
+		return Tool{Name: ModeGit}
 	case ModeDifft:
-		if path := find(configured); path != "" {
+		if path := find(configured, difftNames); path != "" {
 			return Tool{Name: ModeDifft, Path: path}
 		}
 		return Tool{Name: ModeGit}
 	default:
-		if path := find(configured); path != "" {
+		if configured = strings.TrimSpace(configured); configured != "" {
+			if path := executable(configured); path != "" {
+				return Tool{Name: toolName(path), Path: path}
+			}
+		}
+		if path := find("", deltaNames); path != "" {
+			return Tool{Name: ModeDelta, Path: path}
+		}
+		if path := find("", difftNames); path != "" {
 			return Tool{Name: ModeDifft, Path: path}
 		}
 		return Tool{Name: ModeGit}
 	}
 }
 
-func find(configured string) string {
+// toolName infers an auto-detected renderer from its binary name.
+func toolName(path string) string {
+	if strings.Contains(strings.ToLower(filepath.Base(path)), "delta") {
+		return ModeDelta
+	}
+	return ModeDifft
+}
+
+func find(configured string, names []string) string {
 	configured = strings.TrimSpace(configured)
 	if configured != "" {
-		if path, err := exec.LookPath(configured); err == nil && isExecutable(path) {
-			return path
-		}
-		if isExecutable(configured) {
-			return configured
-		}
-		return ""
+		return executable(configured)
 	}
 
-	for _, name := range []string{"difft", "difftastic"} {
+	for _, name := range names {
 		if path, err := exec.LookPath(name); err == nil && isExecutable(path) {
 			return path
 		}
@@ -68,22 +91,34 @@ func find(configured string) string {
 
 	var candidates []string
 	for _, root := range miseRoots() {
-		candidates = append(candidates, filepath.Join(root, "shims", "difft"))
-		for _, tool := range []string{"difftastic", "difft"} {
-			candidates = append(candidates, glob(filepath.Join(root, "installs", tool, "*", "difft"))...)
-			candidates = append(candidates, glob(filepath.Join(root, "installs", tool, "*", ".mise-bins", "difft"))...)
+		for _, name := range names {
+			candidates = append(candidates, filepath.Join(root, "shims", name))
+			candidates = append(candidates, glob(filepath.Join(root, "installs", name, "*", name))...)
+			candidates = append(candidates, glob(filepath.Join(root, "installs", name, "*", ".mise-bins", name))...)
 		}
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		candidates = append(candidates,
-			filepath.Join(home, ".cargo", "bin", "difft"),
-			filepath.Join(home, ".local", "bin", "difft"),
-		)
+		for _, name := range names {
+			candidates = append(candidates,
+				filepath.Join(home, ".cargo", "bin", name),
+				filepath.Join(home, ".local", "bin", name),
+			)
+		}
 	}
 	for i := len(candidates) - 1; i >= 0; i-- {
 		if isExecutable(candidates[i]) {
 			return candidates[i]
 		}
+	}
+	return ""
+}
+
+func executable(configured string) string {
+	if path, err := exec.LookPath(configured); err == nil && isExecutable(path) {
+		return path
+	}
+	if isExecutable(configured) {
+		return configured
 	}
 	return ""
 }

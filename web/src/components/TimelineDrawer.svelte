@@ -6,6 +6,7 @@
     import { absoluteTime, baseName, relativeTime } from '../lib/format';
     import { fetchRange, fetchSnapshot, fetchTimeline, restoreSnapshot, setSnapshotLabel } from '../lib/timeline';
     import type { SnapshotDetail, TimelineEntry } from '../lib/timeline';
+    import { resolvedTheme } from '../lib/theme.svelte';
     import type { Worktree } from '../lib/types';
 
     interface Props {
@@ -79,7 +80,7 @@
         if (!text) return [];
         let lines = text.split('\n');
         if (lines.length > 3000) lines = lines.slice(0, 3000);
-        if (detail?.diffTool === 'difft') {
+        if (detail?.diffTool === 'difft' || detail?.diffTool === 'delta') {
             return lines.map(line => ({ kind: '', tokens: parseAnsiLine(line) }));
         }
         return lines.map(line => ({
@@ -174,6 +175,28 @@
         void load(true);
     }
 
+    function diffToolLabel(tool: string): string {
+        switch (tool) {
+            case 'difft':
+                return 'difftastic';
+            case 'delta':
+                return 'delta';
+            default:
+                return 'git diff';
+        }
+    }
+
+    function diffToolTitle(tool: string): string {
+        switch (tool) {
+            case 'difft':
+                return 'Structural diff by difftastic';
+            case 'delta':
+                return 'Syntax-highlighted diff by delta';
+            default:
+                return 'Unified diff by git';
+        }
+    }
+
     function kindLabel(kind: string): string {
         switch (kind) {
             case 'snapshot':
@@ -257,6 +280,7 @@
         const hash = selectedHash;
         const from = selectedFrom;
         const file = selectedFile;
+        const appearance = resolvedTheme();
         const key = `${from ?? ''}|${hash ?? ''}`;
         if (key !== lastDetailKey) {
             restorePath = '';
@@ -280,8 +304,8 @@
         void (async () => {
             try {
                 const result = from
-                    ? await fetchRange(worktree.path, from, hash, file ?? '')
-                    : await fetchSnapshot(worktree.path, hash, file ?? '');
+                    ? await fetchRange(worktree.path, from, hash, file ?? '', appearance)
+                    : await fetchSnapshot(worktree.path, hash, file ?? '', appearance);
                 if (!cancelled) detail = result;
             } catch (cause) {
                 if (!cancelled) {
@@ -356,7 +380,7 @@
 
             {#if entries.length === 0 && !loading}
                 <p class="muted timeline-empty">
-                    No snapshots{fileFilter ? ' touch this file' : ''} yet.
+                    No changes{fileFilter ? ' touch this file' : ' since initialization'} yet.
                 </p>
             {:else}
                 {#if entries.length > 1}
@@ -419,11 +443,9 @@
                         {#if detail.diffTool}
                             <span
                                 class="diff-tool mono faint"
-                                title={detail.diffTool === 'difft'
-                                    ? 'Structural diff by difftastic'
-                                    : 'Unified diff by git'}
+                                title={diffToolTitle(detail.diffTool)}
                             >
-                                {detail.diffTool === 'difft' ? 'difftastic' : 'git diff'}
+                                {diffToolLabel(detail.diffTool)}
                             </span>
                         {/if}
                     </div>
@@ -598,7 +620,7 @@
                 {/if}
 
                 {#if detail.diff}
-                    <pre class="diff" class:stale={detailLoading}>{#each diffRows as row, index (index)}<span class={row.kind}>{#each row.tokens as token}<span class={token.className}>{token.text}</span>{/each}</span>{/each}</pre>
+                    <pre class="diff" class:stale={detailLoading}>{#each diffRows as row, index (index)}<span class={row.kind}>{#each row.tokens as token}<span class={token.className} style={token.style}>{token.text}</span>{/each}</span>{/each}</pre>
                     {#if diffTruncated}
                         <p class="muted diff-note">Diff truncated.</p>
                     {/if}
@@ -993,7 +1015,7 @@
         border: 1px solid var(--line);
         border-radius: var(--radius-sm);
         background: var(--bg);
-        color: var(--text-secondary);
+        color: var(--ink-2);
         font-family: var(--font-mono);
         font-size: 10.5px;
         line-height: 1.5;

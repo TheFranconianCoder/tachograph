@@ -45,13 +45,15 @@ history:
     maxAge: 2160h        # one per week up to 90 days; 0 = keep forever
     archive: true        # keep the state before the retained window
 diff:
-  # Render snapshot patches with difftastic when it is installed.
-  # auto: difftastic when found, git otherwise.
+  # Render snapshot patches with delta or difftastic when installed.
+  # auto: delta when found, then difftastic, then git.
   # git: always use git's unified diff.
+  # delta: prefer delta; falls back to git when it is not available.
   # difft: prefer difftastic; falls back to git when it is not available.
   tool: auto
-  # Optional explicit difftastic binary; otherwise PATH and mise are searched.
-  # path: /home/you/.local/bin/difft
+  # Optional explicit binary for the selected renderer; otherwise PATH and mise
+  # are searched.
+  # path: /home/you/.local/bin/delta
 worktrees:
   # Globs for worktrees whose main repository is outside the roots.
   # Absolute paths or paths starting with ~; * ? [] are supported.

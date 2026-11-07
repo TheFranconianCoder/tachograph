@@ -37,11 +37,19 @@
         onToggleAutostart,
     }: Props = $props();
 
-    const diffLabel = $derived(status?.diffTool === 'difft' ? 'difftastic' : 'git diff');
+    const diffLabel = $derived(
+        status?.diffTool === 'difft'
+            ? 'difftastic'
+            : status?.diffTool === 'delta'
+              ? 'delta'
+              : 'git diff'
+    );
     const diffTitle = $derived(
         status?.diffTool === 'difft'
             ? 'Structural diff by difftastic'
-            : 'Unified diff by git'
+            : status?.diffTool === 'delta'
+              ? 'Syntax-highlighted diff by delta'
+              : 'Unified diff by git'
     );
 
     const recorderCounts = $derived.by(() => {

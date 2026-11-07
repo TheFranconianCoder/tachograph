@@ -69,7 +69,8 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 		t.Fatalf("first snapshot: %v", err)
 	}
 	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
-	if _, err := recorder.Snapshot(ctx); err != nil {
+	second, err := recorder.Snapshot(ctx)
+	if err != nil {
 		t.Fatalf("second snapshot: %v", err)
 	}
 	writeFile(t, filepath.Join(worktree, "b.txt"), "new file\n")
@@ -82,8 +83,8 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Timeline: %v", err)
 	}
-	if len(page.Entries) != 4 {
-		t.Fatalf("timeline entries = %d, want 3 snapshots + base", len(page.Entries))
+	if len(page.Entries) != 2 {
+		t.Fatalf("timeline entries = %d, want 2 snapshots after initialization", len(page.Entries))
 	}
 	if page.HasMore {
 		t.Error("HasMore = true, want false")
@@ -95,23 +96,23 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 	if newest.Hash != third.Hash {
 		t.Errorf("newest hash = %s, want %s", newest.Hash, third.Hash)
 	}
-	if last := page.Entries[len(page.Entries)-1]; last.Kind != "base" {
-		t.Errorf("oldest entry kind = %q, want base", last.Kind)
+	if last := page.Entries[len(page.Entries)-1]; last.Hash != second.Hash {
+		t.Errorf("oldest entry = %s, want the first post-initialization snapshot %s", last.Hash, second.Hash)
 	}
 
-	limited, err := recorder.Timeline(ctx, 2, 0, "")
+	limited, err := recorder.Timeline(ctx, 1, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(limited.Entries) != 2 || !limited.HasMore {
-		t.Errorf("limited page = %d entries, hasMore=%v; want 2,true", len(limited.Entries), limited.HasMore)
+	if len(limited.Entries) != 1 || !limited.HasMore {
+		t.Errorf("limited page = %d entries, hasMore=%v; want 1,true", len(limited.Entries), limited.HasMore)
 	}
-	next, err := recorder.Timeline(ctx, 2, 2, "")
+	next, err := recorder.Timeline(ctx, 1, 1, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(next.Entries) != 2 || next.HasMore {
-		t.Errorf("second page = %d entries, hasMore=%v; want 2,false", len(next.Entries), next.HasMore)
+	if len(next.Entries) != 1 || next.HasMore {
+		t.Errorf("second page = %d entries, hasMore=%v; want 1,false", len(next.Entries), next.HasMore)
 	}
 	if next.Entries[0].Hash == limited.Entries[0].Hash {
 		t.Error("offset did not advance the timeline")
@@ -144,7 +145,8 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 		t.Errorf("first snapshot files = %+v, want an added a.txt", firstDetail.Files)
 	}
 
-	baseDetail, err := recorder.SnapshotDetail(ctx, page.Entries[len(page.Entries)-1].Hash, "")
+	baseHash := mustGit(t, recorder.Placeholder, "rev-list", "--max-parents=0", "HEAD")
+	baseDetail, err := recorder.SnapshotDetail(ctx, baseHash, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -404,21 +406,28 @@ func TestSnapshotRange(t *testing.T) {
 		t.Errorf("single count = %d, want 1", single.Count)
 	}
 
-	// A range that starts at the root includes the root itself.
+	// The timeline starts after the initial copy, so its root is the first
+	// snapshot that contains an actual change.
 	page, err := recorder.Timeline(ctx, 50, 0, "")
 	if err != nil {
 		t.Fatalf("Timeline: %v", err)
 	}
 	root := page.Entries[len(page.Entries)-1]
-	fromRoot, err := recorder.RangeDetail(ctx, root.Hash, snapshots[0].Hash, "")
+	if root.Hash != snapshots[1].Hash {
+		t.Errorf("timeline root = %s, want %s", root.Hash, snapshots[1].Hash)
+	}
+	fromRoot, err := recorder.RangeDetail(ctx, root.Hash, snapshots[2].Hash, "")
 	if err != nil {
 		t.Fatalf("RangeDetail(root): %v", err)
 	}
 	if fromRoot.Count != 2 {
-		t.Errorf("root range count = %d, want 2 (base + first snapshot)", fromRoot.Count)
+		t.Errorf("root range count = %d, want 2 (root + next snapshot)", fromRoot.Count)
 	}
-	if !strings.Contains(fromRoot.Diff, "+one") {
-		t.Errorf("root range diff = %q, want the first snapshot change", fromRoot.Diff)
+	if !strings.Contains(fromRoot.Diff, "+two") || !strings.Contains(fromRoot.Diff, "+new") {
+		t.Errorf("root range diff = %q, want the changes after initialization", fromRoot.Diff)
+	}
+	if strings.Contains(fromRoot.Diff, "+one") {
+		t.Errorf("root range diff includes the initial copy: %q", fromRoot.Diff)
 	}
 
 	// Reversed endpoints are not a timeline.

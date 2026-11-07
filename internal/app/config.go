@@ -37,10 +37,10 @@ type Config struct {
 
 // DiffConfig selects the renderer for snapshot patches.
 type DiffConfig struct {
-	// Tool is auto (use difftastic when installed), git (unified diff always)
-	// or difft (use difftastic when it can be found).
+	// Tool is auto (prefer delta, then difftastic), git (unified diff always),
+	// delta or difft.
 	Tool string `yaml:"tool"`
-	// Path is an optional explicit difftastic binary.
+	// Path is an optional explicit binary for the selected renderer.
 	Path string `yaml:"path,omitempty"`
 }
 
@@ -244,7 +244,7 @@ func LoadConfig(path string) (Config, error) {
 	}
 	cfg.Diff.Tool = strings.ToLower(strings.TrimSpace(cfg.Diff.Tool))
 	switch cfg.Diff.Tool {
-	case "git", "difft":
+	case "git", "difft", "delta":
 	case "auto", "":
 		cfg.Diff.Tool = "auto"
 	default:

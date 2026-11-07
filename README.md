@@ -27,7 +27,7 @@ both.
 - **Restorable** — put a file or a whole worktree back without touching the project's Git history.
 - **Useful on arrival** — copy local files such as `.env` from the main worktree and run a setup step
   when a new worktree appears.
-- **Tool-friendly** — it orchestrates `git`, `watchexec` and `difftastic` instead of reimplementing
+- **Tool-friendly** — it orchestrates `git`, `watchexec`, `delta` and `difftastic` instead of reimplementing
   them.
 
 ---
@@ -70,11 +70,13 @@ Requirements: Go 1.26+, Node 22+ and pnpm 11+. `watchexec` is optional: when it 
 a mise installation) it becomes the primary trigger; without it the app polls. Set `watcher.engine` to
 force one path.
 
-[difftastic](https://difftastic.wilfred.me.uk) (`difft`) is optional and improves the snapshot diff:
-it shows structural changes instead of line-based patches. Difftastic's ANSI colours are preserved
-and mapped onto the light/dark theme palette, so added and removed tokens stay readable. It is
-detected in PATH or a mise installation; `diff.tool` selects `auto`, `git` or `difft`, and
-`diff.path` points at a specific binary. Without it, the timeline shows Git's unified diff.
+[delta](https://github.com/dandavison/delta) and
+[difftastic](https://difftastic.wilfred.me.uk) (`difft`) are optional and improve the snapshot
+diff. Delta adds syntax highlighting and line numbers, while difftastic shows structural changes.
+Their ANSI colors are preserved, and the renderer follows the UI's light/dark theme. Both are
+detected in PATH or a mise installation; `diff.tool` selects `auto` (delta, then difftastic), `git`,
+`delta` or `difft`, and `diff.path` points at a specific binary. Without them, the timeline shows
+Git's unified diff.
 
 ```bash
 task build          # build the UI and the static binary
@@ -183,7 +185,7 @@ state file does not exist yet. A startup grace of the same length keeps those wa
 five minutes.
 
 The status card shows `Recording: on`, the trigger engine (`watchexec` or `poll`), the diff renderer
-(`difftastic` or `git diff`), total snapshots and the last snapshot time. A three-part strip
+(`delta`, `difftastic` or `git diff`), total snapshots and the last snapshot time. A three-part strip
 summarizes the recorder state of all worktrees: **watching**, **polling** and **idle**. Every worktree row shows its state (`watching`, `polling`, `idle`,
 `paused`, `error`), `N snap` / `N snaps`, the snapshot age and the current poll interval on hover. The
 Activity list keeps one entry per worktree: a new snapshot or error replaces the previous entry for
@@ -244,7 +246,7 @@ POST /api/v1/restore   {"path": "...", "hash": "...", "file": "src/app.go"}
 ```
 
 The list contains only the relative time and the short hash; the snapshot itself is shown in the
-detail pane, where the diff renderer (`difftastic` or `git diff`) is labelled. Every scroll
+detail pane, where the diff renderer (`delta`, `difftastic` or `git diff`) is labelled. Every scroll
 container reserves its gutter, so a scrollbar appearing—or the drawer locking the page—never shifts
 the layout.
 

@@ -32,6 +32,10 @@ func TestSnapshotLabels(t *testing.T) {
 		t.Fatalf("Ensure: %v", err)
 	}
 	writeFile(t, filepath.Join(worktree, "a.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
 	snapshot, err := recorder.Snapshot(ctx)
 	if err != nil {
 		t.Fatalf("snapshot: %v", err)

@@ -1161,12 +1161,11 @@ details[open] > summary .panel-caret {
     display: block;
 }
 
+/* Details never truncate: the shortened hash and counts always stay
+ * visible, while only the worktree name gets an ellipsis. */
 .activity-details {
-    max-width: 60%;
-    overflow: hidden;
     color: var(--ink-2);
     text-align: right;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 

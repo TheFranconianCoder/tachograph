@@ -15,6 +15,8 @@ function storedMode(): ThemeMode {
 
 export const theme = $state<{ mode: ThemeMode }>({ mode: storedMode() });
 
+let systemDark = $state(false);
+
 function apply(mode: ThemeMode): void {
     document.documentElement.dataset.theme = mode;
     try {
@@ -26,6 +28,19 @@ function apply(mode: ThemeMode): void {
 
 export function initTheme(): void {
     apply(theme.mode);
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+        const query = window.matchMedia('(prefers-color-scheme: dark)');
+        systemDark = query.matches;
+        query.addEventListener('change', event => {
+            systemDark = event.matches;
+        });
+    }
+}
+
+/** The effective light/dark appearance, resolving auto against the OS. */
+export function resolvedTheme(): 'light' | 'dark' {
+    if (theme.mode === 'light' || theme.mode === 'dark') return theme.mode;
+    return systemDark ? 'dark' : 'light';
 }
 
 export function cycleTheme(): void {

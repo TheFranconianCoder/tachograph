@@ -96,14 +96,8 @@ func TestEnsureAndSnapshot(t *testing.T) {
 	if !strings.Contains(first.Message, "[feature@") {
 		t.Errorf("snapshot message = %q, want project context", first.Message)
 	}
-	if first.Stats == nil {
-		t.Fatal("snapshot stats missing")
-	}
-	if first.Stats.Files != 2 {
-		t.Errorf("snapshot files = %d, want 2", first.Stats.Files)
-	}
-	if first.Stats.Added == 0 {
-		t.Errorf("snapshot stats = %+v, want added lines", first.Stats)
+	if first.Stats != nil {
+		t.Errorf("initial snapshot stats = %+v, want nil", first.Stats)
 	}
 
 	files := mustGit(t, recorder.Placeholder, "ls-files")

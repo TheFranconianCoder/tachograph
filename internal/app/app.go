@@ -101,9 +101,9 @@ func New(cfg Config, cfgPath string, opts Options, log *slog.Logger) (*App, erro
 	historyStore.Diff = difft.Resolve(cfg.Diff.Tool, cfg.Diff.Path)
 	lastActive, persistedActivity := loadActivityState(log)
 	if historyStore.Diff.Enabled() {
-		log.Info("difftastic diff enabled", "binary", historyStore.Diff.Path)
-	} else if cfg.Diff.Tool == "difft" {
-		log.Warn("diff.tool is difft but no difftastic binary was found; using git diff")
+		log.Info("diff renderer enabled", "tool", historyStore.Diff.Name, "binary", historyStore.Diff.Path)
+	} else if cfg.Diff.Tool == "difft" || cfg.Diff.Tool == "delta" {
+		log.Warn("configured diff tool was not found; using git diff", "tool", cfg.Diff.Tool)
 	}
 
 	instance := &App{

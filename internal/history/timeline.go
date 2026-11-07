@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/TheFranconianCoder/tachograph/internal/difft"
 )
 
 // TimelineEntry is one commit on a worktree's history branch.
@@ -84,6 +86,9 @@ func (r *Recorder) Timeline(ctx context.Context, limit, offset int, file string)
 		"--max-count=" + strconv.Itoa(limit+1),
 		"--skip=" + strconv.Itoa(offset),
 	}
+	if lower := r.timelineLowerBound(ctx); lower != "" {
+		args = append(args, lower+"..HEAD")
+	}
 	if file != "" {
 		args = append(args, "--", literalPathspec(file))
 	}
@@ -119,6 +124,29 @@ func (r *Recorder) Timeline(ctx context.Context, limit, offset int, file string)
 		page.HasMore = true
 	}
 	return page, nil
+}
+
+// timelineLowerBound returns the newest commit that should stay out of the
+// timeline. The empty initialization commit and the first snapshot, which is
+// just a copy of the source tree, are not changes worth showing.
+func (r *Recorder) timelineLowerBound(ctx context.Context) string {
+	root, err := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
+	if err != nil || root == "" {
+		return ""
+	}
+	subject, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%s", root)
+	if err != nil || !strings.HasPrefix(subject, "base:") {
+		return ""
+	}
+	commits, err := runGit(ctx, r.Placeholder, "rev-list", "--ancestry-path", "--reverse", root+"..HEAD")
+	if err != nil {
+		return root
+	}
+	initial, _, _ := strings.Cut(strings.TrimSpace(commits), "\n")
+	if initial == "" {
+		return root
+	}
+	return initial
 }
 
 // SnapshotDetail returns the file list and patch for one commit. When file is
@@ -304,33 +332,54 @@ func boundDiff(diff string, truncated bool) (string, bool) {
 	return diff[:cut], true
 }
 
-// diffBetween renders the patch between two commits. difftastic is used when it
-// was resolved and produces output; Git's unified diff is the fallback.
+// diffBetween renders the patch between two commits. Delta or difftastic is
+// used when it was resolved and produces output; Git's unified diff is the
+// fallback.
 func (r *Recorder) diffBetween(ctx context.Context, from, to, file string) (string, string, error) {
 	pathspec := []string{}
 	if file != "" {
 		pathspec = []string{"--", literalPathspec(file)}
 	}
+	theme := diffTheme(ctx)
 
 	if r.Diff.Enabled() {
-		env := []string{
-			"GIT_EXTERNAL_DIFF=" + r.Diff.Path,
-			"DFT_DISPLAY=inline",
-			"DFT_COLOR=always",
-			"DFT_WIDTH=160",
-			"DFT_CONTEXT=1",
-			"DFT_SYNTAX_HIGHLIGHT=on",
-			"DFT_BACKGROUND=dark",
-		}
-		args := []string{
-			"diff", "--find-renames", "--unified=1", "--no-textconv",
-			"--ext-diff", from, to,
-		}
-		args = append(args, pathspec...)
-		output, err := runGitEnv(ctx, r.Placeholder, env, args...)
-		if err == nil {
-			if text := strings.TrimSpace(output); text != "" {
-				return text, "difft", nil
+		switch r.Diff.Name {
+		case difft.ModeDelta:
+			args := []string{
+				"diff", "--find-renames", "--unified=1",
+				"--no-color", "--no-ext-diff", "--no-textconv", from, to,
+			}
+			args = append(args, pathspec...)
+			diff, err := runGit(ctx, r.Placeholder, args...)
+			if err == nil {
+				if text := strings.TrimSpace(diff); text != "" {
+					rendered, renderErr := runDelta(ctx, r.Diff.Path, text, theme)
+					if renderErr == nil && strings.TrimSpace(rendered) != "" {
+						return rendered, "delta", nil
+					}
+				}
+				return diff, "git", nil
+			}
+		default:
+			env := []string{
+				"GIT_EXTERNAL_DIFF=" + r.Diff.Path,
+				"DFT_DISPLAY=inline",
+				"DFT_COLOR=always",
+				"DFT_WIDTH=160",
+				"DFT_CONTEXT=1",
+				"DFT_SYNTAX_HIGHLIGHT=on",
+				"DFT_BACKGROUND=" + theme,
+			}
+			args := []string{
+				"diff", "--find-renames", "--unified=1", "--no-textconv",
+				"--ext-diff", from, to,
+			}
+			args = append(args, pathspec...)
+			output, err := runGitEnv(ctx, r.Placeholder, env, args...)
+			if err == nil {
+				if text := strings.TrimSpace(output); text != "" {
+					return text, "difft", nil
+				}
 			}
 		}
 	}
