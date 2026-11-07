@@ -1,3 +1,8 @@
 [tools]
+go = "1.27.3"
+node = "26.13.0"
+pnpm = "11.13.1"
+task = "3.54.0"
+github-cli = "2.103.3"
 difftastic = "0.72.0"
 watchexec = "2.8.0"

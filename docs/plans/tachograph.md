@@ -6,7 +6,8 @@
 
 **Scope:** product direction and milestone plan; M2, M3, the automatic lifecycle path, M4a, M4b,
 M4c, M4d, M4e, M4f and M5 (recovery) are implemented. M6 (productization) is current:
-auto-registration, worktree patterns and autostart are done; onboarding and packaging remain.
+auto-registration, worktree patterns, autostart and the v0.1.0 release tooling are done;
+onboarding, native installers and the optional backup remain.
 
 ---
 
@@ -387,6 +388,9 @@ detection and project-repository isolation.
   parses SGR into theme-aware spans (theme variables for red/green/yellow/blue/magenta/cyan).
 - The status card reports the resolved diff renderer (`difftastic` or `git diff`), next to the
   watcher engine; `Status.diffTool` exposes `difft` or `git`.
+- Single UI window: a `BroadcastChannel` guard makes a second window focus the primary and close
+  itself; when the browser blocks `window.close()`, a blocking notice offers "Focus existing window"
+  or an explicit takeover. The PWA uses the same guard as a normal browser tab.
 - Restore file/directory from a snapshot (done): safe relative paths, symlinks/executable modes,
   submodules skipped, absent files kept, repo lock held, the next snapshot records the restore.
 - Snapshot labels (done): `PUT /api/v1/snapshot/label`, stored per project in `labels.json`, keyed
@@ -408,7 +412,11 @@ detection and project-repository isolation.
   refreshes the entry (`app --no-open`, plus `--config` for a non-default config) and removes it when
   disabled. Linux uses an XDG desktop entry, macOS a LaunchAgent, Windows the HKCU Run key. Failures
   are warnings, never fatal.
-- Onboarding, packaging.
+- Release tooling (done): the local release skill in `.opencode/skills/release` runs a preflight,
+  builds Linux, macOS and Windows binaries with the version stamped in, writes `SHA256SUMS`, and
+  publishes with `gh release create`. There are no GitHub workflows; notes are drafted in
+  `.release/` and removed after a successful publish.
+- Onboarding, native installers.
 - Optional, explicit remote backup of the history store.
 
 ---

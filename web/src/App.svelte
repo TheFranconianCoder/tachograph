@@ -12,6 +12,7 @@
     import { EventStream } from './lib/events/event-stream';
     import { relativeTime } from './lib/format';
     import { currentRoute, navigate, startRouter, timelineURL } from './lib/router';
+    import { claimAsPrimary, claimWindow, focusPrimaryWindow } from './lib/single-window';
     import type { Route } from './lib/router';
     import type { ConnectionState, Status, Worktree } from './lib/types';
 
@@ -26,6 +27,7 @@
     let connection = $state<ConnectionState>('connecting');
     let statusReceivedAt = $state(Date.now());
     let route = $state<Route>(currentRoute());
+    let duplicateWindow = $state(false);
 
     const stream = new EventStream({
         url: '/api/v1/events',
@@ -40,6 +42,10 @@
     });
 
     onMount(() => {
+        claimWindow(() => {
+            duplicateWindow = true;
+            window.close();
+        });
         const stopRouter = startRouter(next => {
             route = next;
         });
@@ -467,6 +473,46 @@
         <span>No telemetry</span>
     </footer>
 
+    {#if duplicateWindow}
+        <div
+            class="single-window"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Tachograph is already open"
+        >
+            <div class="single-window__card">
+                <p class="eyebrow">Single window</p>
+                <h2>Tachograph is already open</h2>
+                <p class="muted">
+                    Only one UI window can be active. Focus the existing window, or close this tab
+                    manually.
+                </p>
+                <div class="single-window__actions">
+                    <button
+                        type="button"
+                        class="btn btn--primary btn--sm"
+                        onclick={() => {
+                            focusPrimaryWindow();
+                            window.close();
+                        }}
+                    >
+                        Focus existing window
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn--ghost btn--sm"
+                        onclick={() => {
+                            claimAsPrimary();
+                            duplicateWindow = false;
+                        }}
+                    >
+                        Use this window
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
+
     {#if timelineWorktree}
         {#key timelineWorktree.path}
             <TimelineDrawer
@@ -493,3 +539,43 @@
         </div>
     {/if}
 </div>
+
+<style>
+    .single-window {
+        position: fixed;
+        inset: 0;
+        z-index: 60;
+        display: grid;
+        place-items: center;
+        padding: 20px;
+        background: rgb(0 0 0 / 55%);
+    }
+
+    .single-window__card {
+        width: min(420px, 100%);
+        padding: 18px 20px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--bg-elevated);
+        box-shadow: var(--shadow-2);
+    }
+
+    .single-window__card h2 {
+        margin: 4px 0 6px;
+        font-size: 16px;
+        font-weight: 650;
+    }
+
+    .single-window__card p {
+        margin: 0 0 14px;
+        font-size: 12.5px;
+        line-height: 1.55;
+    }
+
+    .single-window__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+    }
+</style>

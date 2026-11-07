@@ -6,9 +6,9 @@ A tachograph records a journey continuously, without gaps, on a physical chart. 
 same for Git worktrees: it records the states between commits, keeps them out of the project's Git
 graph, and gives every worktree its own timeline.
 
-> Status: **M6 — productization** — M5 is complete: every worktree has a snapshot timeline with a
-> file filter, a coloured per-file diff, file/directory restore and snapshot labels, recorded by
-> watchexec events with an adaptive poll fallback.
+> Status: **v0.1.0 — first release** — every worktree has a snapshot timeline with a file filter,
+> a coloured per-file diff, file/directory restore and snapshot labels, recorded by watchexec
+> events with an adaptive poll fallback. Release binaries are built for Linux, macOS and Windows.
 
 ---
 
@@ -32,7 +32,39 @@ both.
 
 ---
 
-## Quick start
+## Install
+
+Download the binary for your platform from the
+[GitHub releases](https://github.com/TheFranconianCoder/tachograph/releases):
+
+```text
+tachograph-linux-amd64
+tachograph-linux-arm64
+tachograph-darwin-amd64
+tachograph-darwin-arm64
+tachograph-windows-amd64.exe
+SHA256SUMS
+```
+
+Linux and macOS:
+
+```bash
+curl -LO https://github.com/TheFranconianCoder/tachograph/releases/download/v0.1.0/tachograph-linux-amd64
+chmod +x tachograph-linux-amd64
+install -m 755 tachograph-linux-amd64 ~/.local/bin/tachograph
+tachograph
+```
+
+Windows: download `tachograph-windows-amd64.exe` and run it.
+
+Verify the download with `sha256sum -c SHA256SUMS` on Linux or
+`shasum -a 256 -c SHA256SUMS` on macOS. The macOS binaries are unsigned;
+Gatekeeper may need an explicit allow in System Settings.
+
+The first start opens the UI; add a root such as `~/Code` and the worktrees
+below it are recorded. Start at login is available in the status card.
+
+## Build from source
 
 Requirements: Go 1.26+, Node 22+ and pnpm 11+. `watchexec` is optional: when it is installed (PATH or
 a mise installation) it becomes the primary trigger; without it the app polls. Set `watcher.engine` to
@@ -161,6 +193,9 @@ restart.
 
 The UI is live: it opens one SSE connection to `GET /api/v1/events`, receives a full status snapshot
 on connect and after every change, and shows the connection state in the topbar and the status card.
+Only one UI window is active. A second window announces itself over a `BroadcastChannel`, focuses the
+existing window and closes itself when the browser allows it; otherwise it shows a blocking notice
+with **Focus existing window**.
 In the installed PWA the topbar uses the **Window Controls Overlay**: it becomes the OS title bar,
 reserves the platform window controls and is draggable except for its buttons. Browser tabs keep the
 normal topbar.
@@ -388,12 +423,12 @@ The product plan lives at [`docs/plans/tachograph.md`](docs/plans/tachograph.md)
 
 ---
 
-## Not implemented yet (M6)
+## Not implemented yet (0.x)
 
 - Onboarding / first-run guidance
 - SQLite metadata (state is re-scanned on startup)
 - `post-checkout` notification and manual `worktree setup` command
-- Packaging and installers
+- Native installers (deb, rpm, MSI, pkg)
 - Optional, explicit remote backup (sync and telemetry are non-goals)
 
 ---
@@ -411,3 +446,6 @@ The product plan lives at [`docs/plans/tachograph.md`](docs/plans/tachograph.md)
 ## License
 
 Tachograph is licensed under the [Mozilla Public License 2.0](LICENSE) (MPL-2.0).
+
+Release notes and binaries are published on the
+[GitHub releases](https://github.com/TheFranconianCoder/tachograph/releases) page.

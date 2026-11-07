@@ -11,6 +11,9 @@
 /internal/web/dist/*
 !/internal/web/dist/.gitkeep
 
+# Release notes drafted by the release skill before publishing
+/.release/
+
 # Local configuration and data
 /config.yaml
 *.db
