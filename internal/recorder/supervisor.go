@@ -34,6 +34,7 @@ type Event struct {
 	Kind    string
 	Hash    string
 	Message string
+	Stats   *history.ChangeStats
 }
 
 // Options configures the supervisor.
@@ -333,7 +334,7 @@ func (s *Supervisor) snapshot(ctx context.Context, item *entry) {
 		s.emit(Event{Time: now, Path: item.path, Kind: "error", Message: err.Error()})
 	default:
 		s.log.Info("snapshot recorded", "path", item.path, "hash", snapshot.Hash)
-		s.emit(Event{Time: snapshot.CreatedAt, Path: item.path, Kind: "snapshot", Hash: snapshot.Hash})
+		s.emit(Event{Time: snapshot.CreatedAt, Path: item.path, Kind: "snapshot", Hash: snapshot.Hash, Stats: snapshot.Stats})
 	}
 }
 

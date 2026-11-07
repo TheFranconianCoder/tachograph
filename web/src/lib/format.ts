@@ -1,10 +1,18 @@
-import type { Worktree } from './types';
+import type { ChangeStats, Worktree } from './types';
 
 export const baseName = (path: string): string => path.split(/[\\/]/).pop() ?? path;
 
 /** Shortens a commit hash for dense tables; the full value stays in the title. */
 export const shortHash = (hash: string, length = 12): string =>
     hash.length > length ? hash.slice(0, length) : hash;
+
+/** Compact line counts for dense tables, e.g. "+12 -4". */
+export const changeSummary = (stats: ChangeStats): string => `+${stats.added} -${stats.deleted}`;
+
+/** Human-readable form of the same counts for tooltips. */
+export const changeTitle = (stats: ChangeStats): string =>
+    `${stats.files} ${stats.files === 1 ? 'file' : 'files'} changed, ` +
+    `+${stats.added} -${stats.deleted}`;
 
 export const absoluteTime = (value?: string): string =>
     value ? new Date(value).toLocaleString() : '—';

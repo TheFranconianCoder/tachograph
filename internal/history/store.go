@@ -101,11 +101,19 @@ type Recorder struct {
 	lock *sync.Mutex
 }
 
+// ChangeStats describes the size of one snapshot.
+type ChangeStats struct {
+	Files   int `json:"files"`
+	Added   int `json:"added"`
+	Deleted int `json:"deleted"`
+}
+
 // Snapshot is one recorded state.
 type Snapshot struct {
 	Hash      string
 	Message   string
 	CreatedAt time.Time
+	Stats     *ChangeStats
 }
 
 // HistorySummary describes what already exists on the history branch.
@@ -247,18 +255,14 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, err
 	}
 
-	_, code, err := runGitStatus(ctx, r.Placeholder, "diff", "--cached", "--quiet")
+	numstat, err := runGit(ctx, r.Placeholder, "diff", "--cached", "--numstat")
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("compare worktree: %w", err)
 	}
-	switch code {
-	case 0:
+	if strings.TrimSpace(numstat) == "" {
 		return Snapshot{}, ErrNoChanges
-	case 1:
-		// There are staged changes; commit them.
-	default:
-		return Snapshot{}, fmt.Errorf("git diff --cached --quiet exited with code %d", code)
 	}
+	stats := parseNumstat(numstat)
 
 	// The project branch or HEAD may have moved since Ensure; the snapshot
 	// message should describe the state that was actually recorded.
@@ -281,7 +285,27 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("resolve snapshot hash: %w", err)
 	}
 
-	return Snapshot{Hash: hash, Message: message, CreatedAt: createdAt}, nil
+	return Snapshot{Hash: hash, Message: message, CreatedAt: createdAt, Stats: stats}, nil
+}
+
+// parseNumstat sums Git's --numstat output. Binary files report "-" for both
+// counts and only contribute to the file count.
+func parseNumstat(output string) *ChangeStats {
+	stats := &ChangeStats{}
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			continue
+		}
+		stats.Files++
+		if added, err := strconv.Atoi(fields[0]); err == nil {
+			stats.Added += added
+		}
+		if deleted, err := strconv.Atoi(fields[1]); err == nil {
+			stats.Deleted += deleted
+		}
+	}
+	return stats
 }
 
 // stageWorktree stages the worktree. Git refuses to index a nested repository

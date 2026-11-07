@@ -25,12 +25,19 @@ export interface Project {
     worktrees: Worktree[];
 }
 
+export interface ChangeStats {
+    files: number;
+    added: number;
+    deleted: number;
+}
+
 export interface Activity {
     time: string;
     kind: string;
     path?: string;
     message?: string;
     hash?: string;
+    stats?: ChangeStats;
 }
 
 export interface LifecycleCopyRule {

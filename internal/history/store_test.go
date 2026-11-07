@@ -96,6 +96,15 @@ func TestEnsureAndSnapshot(t *testing.T) {
 	if !strings.Contains(first.Message, "[feature@") {
 		t.Errorf("snapshot message = %q, want project context", first.Message)
 	}
+	if first.Stats == nil {
+		t.Fatal("snapshot stats missing")
+	}
+	if first.Stats.Files != 2 {
+		t.Errorf("snapshot files = %d, want 2", first.Stats.Files)
+	}
+	if first.Stats.Added == 0 {
+		t.Errorf("snapshot stats = %+v, want added lines", first.Stats)
+	}
 
 	files := mustGit(t, recorder.Placeholder, "ls-files")
 	if !strings.Contains(files, "a.txt") || !strings.Contains(files, ".gitignore") {
@@ -119,6 +128,12 @@ func TestEnsureAndSnapshot(t *testing.T) {
 	}
 	if second.Hash == first.Hash {
 		t.Errorf("snapshot hash did not change: %s", second.Hash)
+	}
+	if second.Stats == nil {
+		t.Fatal("second snapshot stats missing")
+	}
+	if second.Stats.Files != 1 || second.Stats.Added != 1 || second.Stats.Deleted != 1 {
+		t.Errorf("second snapshot stats = %+v, want 1 file changed, +1 -1", second.Stats)
 	}
 
 	if got := mustGit(t, project, "rev-parse", "HEAD"); got != projectHead {

@@ -1131,8 +1131,12 @@ details[open] > summary .panel-caret {
     width: 6rem;
 }
 
+.activity-col-worktree {
+    width: 18rem;
+}
+
 .activity-col-details {
-    width: 10rem;
+    width: 14rem;
 }
 
 .activity-worktree {
@@ -1190,15 +1194,15 @@ details[open] > summary .panel-caret {
 
 @media (max-width: 760px) {
     .activity-col-worktree {
-        width: 0;
-    }
-
-    .activity-col-details {
         width: auto;
     }
 
-    .activity-table th:nth-child(3),
-    .activity-table td:nth-child(3) {
+    .activity-col-details {
+        width: 0;
+    }
+
+    .activity-table th:nth-child(4),
+    .activity-table td:nth-child(4) {
         display: none;
     }
 

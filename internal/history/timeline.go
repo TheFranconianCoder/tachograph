@@ -318,12 +318,12 @@ func (r *Recorder) diffBetween(ctx context.Context, from, to, file string) (stri
 			"DFT_DISPLAY=inline",
 			"DFT_COLOR=always",
 			"DFT_WIDTH=160",
-			"DFT_CONTEXT=3",
+			"DFT_CONTEXT=1",
 			"DFT_SYNTAX_HIGHLIGHT=on",
 			"DFT_BACKGROUND=dark",
 		}
 		args := []string{
-			"diff", "--find-renames", "--unified=3", "--no-textconv",
+			"diff", "--find-renames", "--unified=1", "--no-textconv",
 			"--ext-diff", from, to,
 		}
 		args = append(args, pathspec...)
@@ -336,7 +336,7 @@ func (r *Recorder) diffBetween(ctx context.Context, from, to, file string) (stri
 	}
 
 	args := []string{
-		"diff", "--find-renames", "--unified=3",
+		"diff", "--find-renames", "--unified=1",
 		"--no-color", "--no-ext-diff", "--no-textconv", from, to,
 	}
 	args = append(args, pathspec...)

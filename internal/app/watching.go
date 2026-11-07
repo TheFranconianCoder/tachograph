@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/TheFranconianCoder/tachograph/internal/history"
 	"github.com/TheFranconianCoder/tachograph/internal/recorder"
 )
 
@@ -21,11 +22,12 @@ const (
 
 // Activity is one recent recorder event shown in the UI.
 type Activity struct {
-	Time    string `json:"time"`
-	Kind    string `json:"kind"`
-	Path    string `json:"path,omitempty"`
-	Message string `json:"message,omitempty"`
-	Hash    string `json:"hash,omitempty"`
+	Time    string               `json:"time"`
+	Kind    string               `json:"kind"`
+	Path    string               `json:"path,omitempty"`
+	Message string               `json:"message,omitempty"`
+	Hash    string               `json:"hash,omitempty"`
+	Stats   *history.ChangeStats `json:"stats,omitempty"`
 }
 
 // watchGroup is the watcher state of one project. All worktrees of a project
@@ -49,6 +51,7 @@ func (a *App) recordRecorderEvent(event recorder.Event) {
 		Path:    event.Path,
 		Message: event.Message,
 		Hash:    event.Hash,
+		Stats:   event.Stats,
 	}
 
 	a.activityMu.Lock()

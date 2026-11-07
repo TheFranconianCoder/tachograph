@@ -1,5 +1,12 @@
 <script lang="ts">
-    import { absoluteTime, baseName, relativeTime, shortHash } from '../lib/format';
+    import {
+        absoluteTime,
+        baseName,
+        changeSummary,
+        changeTitle,
+        relativeTime,
+        shortHash,
+    } from '../lib/format';
     import type { Activity } from '../lib/types';
 
     interface Props {
@@ -31,7 +38,12 @@
         <tbody>
             {#each activities.slice(0, 10) as event (event.path ?? event.time)}
                 {@const path = event.path}
-                {@const detail = event.message || (event.hash ? shortHash(event.hash) : '')}
+                {@const hash = event.hash ? shortHash(event.hash) : ''}
+                {@const summary = event.stats ? changeSummary(event.stats) : ''}
+                {@const detail = event.message || [hash, summary].filter(Boolean).join(' · ')}
+                {@const detailTitle =
+                    event.message ||
+                    [event.hash, event.stats ? changeTitle(event.stats) : ''].filter(Boolean).join(' · ')}
                 <tr>
                     <td class="mono muted" title={absoluteTime(event.time)}>
                         {relativeTime(event.time, now)}
@@ -56,7 +68,7 @@
                             {path ? baseName(path) : '—'}
                         {/if}
                     </td>
-                    <td class="mono truncate" title={event.message ?? event.hash ?? ''}>
+                    <td class="mono truncate" title={detailTitle}>
                         {detail || '—'}
                     </td>
                 </tr>

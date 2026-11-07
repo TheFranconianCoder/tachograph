@@ -183,7 +183,8 @@ func TestSnapshotDetailUsesDifftAndFallsBackToGit(t *testing.T) {
 	mustGit(t, project, "worktree", "add", "-b", "feature", worktree)
 
 	fake := filepath.Join(base, "difft")
-	if err := os.WriteFile(fake, []byte("#!/bin/sh\nprintf '\\033[91mSTRUCTURAL DIFF\\033[0m\\n'\n"), 0o755); err != nil {
+	script := "#!/bin/sh\nprintf 'CONTEXT=%s\\n' \"$DFT_CONTEXT\"\nprintf '\\033[91mSTRUCTURAL DIFF\\033[0m\\n'\n"
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	store.Diff = difft.Tool{Name: "difft", Path: fake}
@@ -207,6 +208,9 @@ func TestSnapshotDetailUsesDifftAndFallsBackToGit(t *testing.T) {
 	}
 	if !strings.Contains(detail.Diff, "STRUCTURAL DIFF") {
 		t.Errorf("diff = %q, want the external diff output", detail.Diff)
+	}
+	if !strings.Contains(detail.Diff, "CONTEXT=1") {
+		t.Errorf("diff = %q, want DFT_CONTEXT=1", detail.Diff)
 	}
 	if !strings.Contains(detail.Diff, "\x1b[91m") {
 		t.Errorf("diff = %q, want the ANSI colour codes preserved", detail.Diff)
