@@ -1,12 +1,22 @@
-# Tachograph
+<h1 align="center">Tachograph</h1>
 
-**The local history recorder for every worktree.**
+<p align="center"><em>The local history recorder for every worktree.</em></p>
+
+<p align="center">
+  <a href="https://go.dev"><img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white" alt="Go 1.26"></a>
+  <a href="https://svelte.dev"><img src="https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white" alt="Svelte 5"></a>
+  <a href="https://git-scm.com"><img src="https://img.shields.io/badge/Git-history%20store-F05032?logo=git&logoColor=white" alt="Git history store"></a>
+  <a href="https://github.com/watchexec/watchexec"><img src="https://img.shields.io/badge/watchexec-event--driven-DEA584?logo=rust&logoColor=white" alt="watchexec"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MPL--2.0-blue" alt="MPL-2.0"></a>
+  <a href="https://github.com/TheFranconianCoder/tachograph/releases"><img src="https://img.shields.io/github/v/release/TheFranconianCoder/tachograph?include_prereleases&amp;label=release" alt="Release"></a>
+  <a href="#why"><img src="https://img.shields.io/badge/local--first-loopback%20only-2ea44f" alt="Local-first"></a>
+</p>
 
 A tachograph records a journey continuously, without gaps, on a physical chart. Tachograph does the
 same for Git worktrees: it records the states between commits, keeps them out of the project's Git
 graph, and gives every worktree its own timeline.
 
-> Status: **v0.1.0 — first release** — every worktree has a snapshot timeline with a file filter,
+> **Status:** **v0.1.0 — first release** — every worktree has a snapshot timeline with a file filter,
 > a colored per-file diff, snapshot revert and snapshot labels, recorded by watchexec
 > events with an adaptive poll fallback. Release binaries are built for Linux, macOS and Windows.
 
