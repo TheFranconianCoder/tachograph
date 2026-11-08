@@ -54,16 +54,16 @@
     </div>
 
     <span class="worktree-row__meta mono faint" title={progressTitle(worktree)}>
-        {snaps} {snaps === 1 ? 'snap' : 'snaps'}
-        {#if worktree.lastSnapshot}
-            · {relativeTime(worktree.lastSnapshot, now)}
-        {/if}
         {#if worktree.stats}
-            <span class="activity-sep">·</span>
             <span class="worktree-row__stats" title={changeTitle(worktree.stats)}>
                 <span class="activity-added">+{formatCount(worktree.stats.added)}</span>
                 <span class="activity-deleted">-{formatCount(worktree.stats.deleted)}</span>
             </span>
+            <span class="activity-sep">·</span>
+        {/if}
+        {snaps} {snaps === 1 ? 'snap' : 'snaps'}
+        {#if worktree.lastSnapshot}
+            · {relativeTime(worktree.lastSnapshot, now)}
         {/if}
         <button
             type="button"
