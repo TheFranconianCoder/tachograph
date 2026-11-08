@@ -285,12 +285,20 @@ type fakeSnapshotter struct {
 	block chan struct{}
 	// result is returned from every snapshot; nil means a successful snapshot.
 	result error
+	// initialCalls makes the first N successful snapshots report an open
+	// initialization window.
+	initialCalls int
 }
 
 func (f *fakeSnapshotter) Snapshot(ctx context.Context) (history.Snapshot, error) {
 	f.mu.Lock()
 	f.calls++
 	block := f.block
+	initial := false
+	if f.initialCalls > 0 {
+		f.initialCalls--
+		initial = true
+	}
 	f.mu.Unlock()
 
 	if block != nil {
@@ -301,6 +309,9 @@ func (f *fakeSnapshotter) Snapshot(ctx context.Context) (history.Snapshot, error
 		}
 	}
 
+	if initial {
+		return history.Snapshot{Hash: "hash", CreatedAt: time.Now(), Initial: true}, nil
+	}
 	if f.result != nil {
 		return history.Snapshot{}, f.result
 	}
@@ -381,4 +392,21 @@ func writeFile(t *testing.T, path, content string) {
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func TestInitializationSchedulesQuietCheck(t *testing.T) {
+	fake := &fakeSnapshotter{result: history.ErrNoChanges, initialCalls: 1}
+	supervisor := New(Options{
+		Interval:       time.Hour,
+		SettleInterval: 20 * time.Millisecond,
+		Workers:        1,
+		Log:            discardLogger(),
+	})
+	supervisor.Set("/worktree", fake)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go supervisor.Run(ctx)
+
+	waitFor(t, 2*time.Second, func() bool { return fake.Calls() >= 2 })
 }

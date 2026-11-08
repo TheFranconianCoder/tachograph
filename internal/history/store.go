@@ -18,13 +18,34 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TheFranconianCoder/tachograph/internal/difft"
 )
 
+const (
+	// Initialization state lives in the per-worktree config, so it survives a
+	// restart without a second state file. initAt marks a worktree that this
+	// version initialized; a missing value means a legacy store.
+	initConfigAt        = "local-history.initAt"
+	initConfigFirst     = "local-history.initSnapshotAt"
+	initConfigDone      = "local-history.initDone"
+	initRefPrefix       = "refs/tachograph/init/"
+	initAdoptWindow     = 2 * time.Minute
+	initBusyWindow      = 10 * time.Minute
+	initMaxWindow       = 10 * time.Minute
+	initLegacyGap       = 10 * time.Second
+	initLegacySpan      = 2 * time.Minute
+	initLegacyMaxPrefix = 32
+)
+
 // ErrNoChanges means the worktree is identical to its last snapshot.
 var ErrNoChanges = errors.New("no changes to snapshot")
+
+// ErrWorktreeBusy means another Git operation still owns the worktree's index.
+// The snapshot is retried shortly instead of staging a half-finished checkout.
+var ErrWorktreeBusy = errors.New("worktree is busy")
 
 // Store owns the history repositories below Root.
 type Store struct {
@@ -99,6 +120,15 @@ type Recorder struct {
 	Diff        difft.Tool
 
 	lock *sync.Mutex
+
+	// Initialization tracking. initManaged is true for stores created by this
+	// version; legacy stores keep using the timeline fallback. initPending is
+	// atomic because the app reads it while a snapshot worker runs.
+	initManaged    bool
+	initPending    atomic.Bool
+	initAt         time.Time
+	initFirst      time.Time
+	worktreeGitDir string
 }
 
 // ChangeStats describes the size of one snapshot.
@@ -114,6 +144,9 @@ type Snapshot struct {
 	Message   string
 	CreatedAt time.Time
 	Stats     *ChangeStats
+	// Initial reports that this snapshot is still part of the initialization
+	// window and should be followed by a quiet check.
+	Initial bool
 }
 
 // HistorySummary describes what already exists on the history branch.
@@ -220,18 +253,35 @@ func (s *Store) Ensure(ctx context.Context, worktreePath string) (*Recorder, err
 	if err := ensureHistoryRepo(ctx, historyRepo); err != nil {
 		return nil, err
 	}
-	if err := ensurePlaceholder(ctx, historyRepo, placeholder, worktree, project); err != nil {
+	created, err := ensurePlaceholder(ctx, historyRepo, placeholder, worktree, project)
+	if err != nil {
 		return nil, err
 	}
 
-	return &Recorder{
-		Project:     project,
-		Worktree:    worktree,
-		HistoryRepo: historyRepo,
-		Placeholder: placeholder,
-		Diff:        s.Diff,
-		lock:        lock,
-	}, nil
+	recorder := &Recorder{
+		Project:        project,
+		Worktree:       worktree,
+		HistoryRepo:    historyRepo,
+		Placeholder:    placeholder,
+		Diff:           s.Diff,
+		lock:           lock,
+		worktreeGitDir: gitDirForWorktree(worktreeRoot),
+	}
+	if created {
+		if err := recorder.startInitialization(ctx, worktreeRoot); err != nil {
+			return nil, err
+		}
+	}
+	if err := recorder.loadInitState(ctx); err != nil {
+		return nil, err
+	}
+	return recorder, nil
+}
+
+// Initializing reports whether the worktree is still inside its initialization
+// window. The app triggers a quiet check for such a store after a restart.
+func (r *Recorder) Initializing() bool {
+	return r.initPending.Load()
 }
 
 // Exclusive runs fn while holding the project repository lock. Lifecycle
@@ -251,6 +301,14 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		r.lock.Lock()
 		defer r.lock.Unlock()
 	}
+	if r.initPending.Load() && r.worktreeBusy() {
+		return Snapshot{}, ErrWorktreeBusy
+	}
+	// A missing baseline means this snapshot would be the first one. The first
+	// snapshot after creating a worktree is always the hidden source copy, even
+	// when the checkout already produced a tracked modification.
+	hadBaseline := r.initRefHash(ctx) != ""
+
 	if err := r.stageWorktree(ctx); err != nil {
 		return Snapshot{}, err
 	}
@@ -260,7 +318,31 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("compare worktree: %w", err)
 	}
 	if strings.TrimSpace(numstat) == "" {
+		// An empty fresh worktree is not a completed initialization: the
+		// checkout may not have written its first files yet. Keep checking
+		// until something appears or the adoption window expires.
+		if r.initPending.Load() && !hadBaseline && r.initFirst.IsZero() && !r.initWindowExpired() {
+			return Snapshot{}, ErrWorktreeBusy
+		}
+		if err := r.finishInitialization(ctx); err != nil {
+			return Snapshot{}, err
+		}
 		return Snapshot{}, ErrNoChanges
+	}
+
+	// Once the source copy exists, a snapshot that changes or deletes tracked
+	// files is real work, not part of the initialization burst. End the window
+	// before committing so the change stays visible.
+	if r.initPending.Load() && hadBaseline {
+		additions, err := r.onlyAdditions(ctx)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if !additions {
+			if err := r.finishInitialization(ctx); err != nil {
+				return Snapshot{}, err
+			}
+		}
 	}
 
 	// The project branch or HEAD may have moved since Ensure; the snapshot
@@ -284,7 +366,198 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("resolve snapshot hash: %w", err)
 	}
 
+	if r.initPending.Load() {
+		if err := r.advanceInitialization(ctx, hash, createdAt); err != nil {
+			return Snapshot{}, err
+		}
+		return Snapshot{
+			Hash:      hash,
+			Message:   message,
+			CreatedAt: createdAt,
+			Stats:     r.cumulativeStats(ctx, hash),
+			Initial:   r.initPending.Load(),
+		}, nil
+	}
+
+	// A store that starts with initialization already complete (an adopted,
+	// quiescent worktree) still records its source copy as the baseline.
+	if r.initManaged && !hadBaseline && r.firstSnapshot(ctx, hash) {
+		if err := r.setInitRef(ctx, hash); err != nil {
+			return Snapshot{}, err
+		}
+	}
+
 	return Snapshot{Hash: hash, Message: message, CreatedAt: createdAt, Stats: r.cumulativeStats(ctx, hash)}, nil
+}
+
+// onlyAdditions reports whether the staged change consists of additions only.
+// A tracked modification, deletion, rename or type change ends the init window.
+func (r *Recorder) onlyAdditions(ctx context.Context) (bool, error) {
+	output, err := runGit(ctx, r.Placeholder, "diff", "--cached", "--name-only", "--diff-filter=MDRTU")
+	if err != nil {
+		return false, fmt.Errorf("inspect staged changes: %w", err)
+	}
+	return strings.TrimSpace(output) == "", nil
+}
+
+// advanceInitialization records the baseline and closes the window when it has
+// been open for too long.
+func (r *Recorder) advanceInitialization(ctx context.Context, hash string, at time.Time) error {
+	if r.initFirst.IsZero() {
+		r.initFirst = at
+		// The cap is not correctness-critical; a failed config write is retried
+		// implicitly because every later init snapshot tries again.
+		_ = r.SetConfig(ctx, initConfigFirst, at.UTC().Format(time.RFC3339))
+	}
+	if err := r.setInitRef(ctx, hash); err != nil {
+		return err
+	}
+	if !r.initFirst.IsZero() && at.Sub(r.initFirst) > initMaxWindow {
+		return r.finishInitialization(ctx)
+	}
+	return nil
+}
+
+// finishInitialization closes the window. When no baseline ref was written yet
+// (a crash between commit and ref update), the current tip is the newest init
+// commit and becomes the baseline.
+func (r *Recorder) finishInitialization(ctx context.Context) error {
+	if !r.initPending.Load() {
+		return nil
+	}
+	if r.initManaged && r.initRefHash(ctx) == "" {
+		if tip, err := runGit(ctx, r.Placeholder, "rev-parse", "HEAD"); err == nil && tip != "" {
+			if err := r.setInitRef(ctx, tip); err != nil {
+				return err
+			}
+		}
+	}
+	if err := r.SetConfig(ctx, initConfigDone, "true"); err != nil {
+		return err
+	}
+	r.initPending.Store(false)
+	return nil
+}
+
+// firstSnapshot reports whether hash is the first commit after the branch root.
+func (r *Recorder) firstSnapshot(ctx context.Context, hash string) bool {
+	parent, err := runGit(ctx, r.Placeholder, "rev-parse", hash+"^")
+	if err != nil || parent == "" {
+		return false
+	}
+	root, err := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
+	if err != nil {
+		return false
+	}
+	return parent == root
+}
+
+// initRefName is the stable per-worktree reference to the initialization
+// baseline. It lives below a namespace that retention never rewrites.
+func initRefName(worktreeDir string) string {
+	return initRefPrefix + worktreeDir
+}
+
+// initRefHash returns the recorded baseline, or an empty string.
+func (r *Recorder) initRefHash(ctx context.Context) string {
+	hash, err := runGit(ctx, r.Placeholder, "rev-parse", "--verify", "--quiet", initRefName(r.Worktree.Dir))
+	if err != nil {
+		return ""
+	}
+	return hash
+}
+
+// setInitRef points the baseline ref at hash.
+func (r *Recorder) setInitRef(ctx context.Context, hash string) error {
+	if _, err := runGit(ctx, r.Placeholder, "update-ref", initRefName(r.Worktree.Dir), hash); err != nil {
+		return fmt.Errorf("record initialization baseline: %w", err)
+	}
+	return nil
+}
+
+// worktreeBusy reports whether another Git process still owns the worktree's
+// index. Checking the lock file is cheap and avoids staging a checkout that is
+// still in progress. A stale lock is ignored after initBusyWindow.
+func (r *Recorder) worktreeBusy() bool {
+	if r.worktreeGitDir == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(r.worktreeGitDir, "index.lock")); err != nil {
+		return false
+	}
+	return r.initAt.IsZero() || time.Since(r.initAt) <= initBusyWindow
+}
+
+// initWindowExpired reports whether waiting for the first source copy has taken
+// too long. It uses the shorter adoption window so an empty worktree cannot
+// keep the initialization open indefinitely.
+func (r *Recorder) initWindowExpired() bool {
+	return !r.initAt.IsZero() && time.Since(r.initAt) > initAdoptWindow
+}
+
+// startInitialization marks a newly created linked-worktree store. The window
+// opens only for a worktree that is still fresh or has a live Git lock; an
+// existing, fully checked-out worktree starts with the source copy directly.
+func (r *Recorder) startInitialization(ctx context.Context, worktreeRoot string) error {
+	if r.isMainWorktree() {
+		return nil
+	}
+	now := time.Now()
+	done := "true"
+	if worktreeIsFresh(worktreeRoot, now) {
+		done = "false"
+	}
+	// Write the completion flag before initAt. A partial write then leaves a
+	// legacy store instead of a non-fresh worktree that looks unfinished.
+	if err := r.SetConfig(ctx, initConfigDone, done); err != nil {
+		return err
+	}
+	return r.SetConfig(ctx, initConfigAt, now.UTC().Format(time.RFC3339))
+}
+
+func worktreeIsFresh(worktreePath string, now time.Time) bool {
+	gitDir := gitDirForWorktree(worktreePath)
+	if gitDir == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(gitDir, "index.lock")); err == nil {
+		return true
+	}
+	info, err := os.Stat(filepath.Join(worktreePath, ".git"))
+	if err != nil {
+		return false
+	}
+	return now.Sub(info.ModTime()) <= initAdoptWindow
+}
+
+// loadInitState reads the per-worktree initialization keys. A missing initAt
+// means a legacy store; it keeps the read-time fallback instead of starting a
+// new initialization window.
+func (r *Recorder) loadInitState(ctx context.Context) error {
+	at, err := r.Config(ctx, initConfigAt)
+	if err != nil {
+		return err
+	}
+	if at == "" {
+		r.initManaged = false
+		r.initPending.Store(false)
+		return nil
+	}
+	r.initManaged = true
+	if parsed, err := time.Parse(time.RFC3339, at); err == nil {
+		r.initAt = parsed
+	}
+	done, err := r.Config(ctx, initConfigDone)
+	if err != nil {
+		return err
+	}
+	r.initPending.Store(!strings.EqualFold(done, "true"))
+	if first, err := r.Config(ctx, initConfigFirst); err == nil {
+		if parsed, err := time.Parse(time.RFC3339, first); err == nil {
+			r.initFirst = parsed
+		}
+	}
+	return nil
 }
 
 // cumulativeStats returns the net line changes since the worktree was
@@ -495,25 +768,30 @@ func (r *Recorder) SetConfig(ctx context.Context, key, value string) error {
 	return nil
 }
 
-func ensurePlaceholder(ctx context.Context, repo, placeholder string, worktree Worktree, project Project) error {
+// ensurePlaceholder creates or reuses the linked-worktree placeholder. The
+// returned bool is true when both the placeholder and its history branch were
+// created now, which makes the store eligible for a new init window.
+func ensurePlaceholder(ctx context.Context, repo, placeholder string, worktree Worktree, project Project) (bool, error) {
+	fresh := false
 	if _, err := os.Stat(placeholder); errors.Is(err, os.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(placeholder), 0o755); err != nil {
-			return fmt.Errorf("create placeholder directory: %w", err)
+			return false, fmt.Errorf("create placeholder directory: %w", err)
 		}
 
 		branch := worktree.HistoryBranch
 		args := []string{"worktree", "add", "--no-checkout"}
 		if _, err := runGit(ctx, repo, "rev-parse", "--verify", "refs/heads/"+branch); err != nil {
 			args = append(args, "-b", branch)
+			fresh = true
 		}
 		args = append(args, placeholder)
 		if _, err := runGit(ctx, repo, args...); err != nil {
-			return fmt.Errorf("create history worktree placeholder: %w", err)
+			return false, fmt.Errorf("create history worktree placeholder: %w", err)
 		}
 	}
 
 	if _, err := runGit(ctx, placeholder, "rev-parse", "--show-toplevel"); err != nil {
-		return fmt.Errorf("placeholder %s is not a valid Git worktree: %w", placeholder, err)
+		return false, fmt.Errorf("placeholder %s is not a valid Git worktree: %w", placeholder, err)
 	}
 
 	settings := [][]string{
@@ -525,10 +803,10 @@ func ensurePlaceholder(ctx context.Context, repo, placeholder string, worktree W
 	}
 	for _, args := range settings {
 		if _, err := runGit(ctx, placeholder, args...); err != nil {
-			return fmt.Errorf("configure history worktree: %w", err)
+			return false, fmt.Errorf("configure history worktree: %w", err)
 		}
 	}
-	return nil
+	return fresh, nil
 }
 
 func projectInfo(ctx context.Context, worktree, commonDir string) (string, string) {

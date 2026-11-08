@@ -168,6 +168,11 @@ func TestCompactProjectDropsOldCommitsAndKeepsTip(t *testing.T) {
 	if result.Dropped == 0 {
 		t.Fatalf("result = %+v, want dropped commits", result)
 	}
+	// The hidden initialization baseline was part of the dropped prefix; its
+	// ref must not keep the old objects alive.
+	if _, err := runGit(ctx, repo, "rev-parse", "--verify", "--quiet", initRefName(recorder.Worktree.Dir)); err == nil {
+		t.Error("initialization baseline ref survived compaction")
+	}
 
 	summary, err := recorder.Summary(ctx)
 	if err != nil {

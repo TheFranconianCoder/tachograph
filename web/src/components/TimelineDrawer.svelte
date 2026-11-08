@@ -5,7 +5,14 @@
     import type { AnsiToken } from '../lib/ansi';
     import { absoluteTime, baseName, relativeTime } from '../lib/format';
     import { confirm } from '../lib/confirm.svelte';
-    import { fetchRange, fetchSnapshot, fetchTimeline, revertSnapshots, setSnapshotLabel } from '../lib/timeline';
+    import {
+        fetchRange,
+        fetchSnapshot,
+        fetchTimeline,
+        fetchWorktreeDiff,
+        revertSnapshots,
+        setSnapshotLabel,
+    } from '../lib/timeline';
     import type { SnapshotDetail, TimelineEntry } from '../lib/timeline';
     import { resolvedTheme } from '../lib/theme.svelte';
     import type { Worktree } from '../lib/types';
@@ -15,8 +22,10 @@
         selectedHash: string | null;
         selectedFrom: string | null;
         selectedFiles: string[];
+        all: boolean;
         onSelect: (hash: string | null) => void;
         onSelectRange: (from: string, to: string) => void;
+        onToggleAll: () => void;
         onSelectFiles: (files: string[]) => void;
         onClose: () => void;
     }
@@ -26,8 +35,10 @@
         selectedHash,
         selectedFrom,
         selectedFiles,
+        all,
         onSelect,
         onSelectRange,
+        onToggleAll,
         onSelectFiles,
         onClose,
     }: Props = $props();
@@ -60,6 +71,9 @@
     let anchorHash = $state<string | null>(null);
     let anchorPath = $state<string | null>(null);
     const selectedSet = $derived(new Set(selectedFiles));
+    // In the all view, a new snapshot must re-fetch the cumulative diff even
+    // though no hash in the URL changes.
+    const snapshotRevision = $derived(all ? (worktree.snapshots ?? 0) : 0);
 
     interface DiffRow {
         kind: '' | 'add' | 'del' | 'hunk';
@@ -263,6 +277,8 @@
                 return 'archive';
             case 'range':
                 return 'range';
+            case 'all':
+                return 'all';
             default:
                 return 'commit';
         }
@@ -333,11 +349,17 @@
     // reload land on the same view. The effect also guards against out-of-order
     // responses when the selection changes quickly.
     $effect(() => {
+        const isAll = all;
+        // Read the revision only for the all view so a new snapshot refreshes
+        // the cumulative diff without re-fetching fixed single snapshots.
+        let liveRevision = 0;
+        if (isAll) liveRevision = snapshotRevision;
+        void liveRevision;
         const hash = selectedHash;
         const from = selectedFrom;
         const files = selectedFiles;
         const appearance = resolvedTheme();
-        const key = `${from ?? ''}|${hash ?? ''}`;
+        const key = `${isAll ? 'all' : ''}|${from ?? ''}|${hash ?? ''}`;
         if (key !== lastDetailKey) {
             revertMessage = null;
             revertError = null;
@@ -350,7 +372,7 @@
             lastDetailKey = key;
         }
         detailError = null;
-        if (!hash) {
+        if (!isAll && !hash) {
             detail = null;
             detailLoading = false;
             return;
@@ -359,9 +381,11 @@
         let cancelled = false;
         void (async () => {
             try {
-                const result = from
-                    ? await fetchRange(worktreePath, from, hash, files, appearance)
-                    : await fetchSnapshot(worktreePath, hash, files, appearance);
+                const result = isAll
+                    ? await fetchWorktreeDiff(worktreePath, files, appearance)
+                    : from
+                      ? await fetchRange(worktreePath, from, hash!, files, appearance)
+                      : await fetchSnapshot(worktreePath, hash!, files, appearance);
                 if (!cancelled) detail = result;
             } catch (cause) {
                 if (!cancelled) {
@@ -439,7 +463,23 @@
                     No changes{fileFilter ? ' touch this file' : ' since initialization'} yet.
                 </p>
             {:else}
-                {#if entries.length > 1}
+                {#if entries.length > 0}
+                    <div class="timeline-tools">
+                        <button
+                            type="button"
+                            class="btn btn--ghost btn--sm timeline-all"
+                            class:active={all}
+                            aria-pressed={all}
+                            title={all
+                                ? 'Clear the all-snapshots selection'
+                                : 'Select every snapshot and show the whole worktree diff'}
+                            onclick={onToggleAll}
+                        >
+                            {all ? 'Clear' : 'Select all'}
+                        </button>
+                    </div>
+                {/if}
+                {#if entries.length > 1 && !all}
                     <p class="timeline-hint">Shift-click for range</p>
                 {/if}
                 <ul class="timeline-list">
@@ -449,9 +489,10 @@
                                 type="button"
                                 class="timeline-entry"
                                 class:active={selectedHash === entry.hash}
-                                class:in-range={rangeBounds !== null &&
-                                    index >= rangeBounds.first &&
-                                    index <= rangeBounds.last}
+                                class:in-range={all ||
+                                    (rangeBounds !== null &&
+                                        index >= rangeBounds.first &&
+                                        index <= rangeBounds.last)}
                                 title={entryTitle(entry)}
                                 aria-label={entryTitle(entry)}
                                 onclick={event => select(entry, event.shiftKey)}
@@ -517,35 +558,43 @@
                             {/if}
                         </span>
                     </div>
-                    {#if selectedFrom && selectedHash}
+                    {#if all || (selectedFrom && selectedHash)}
                         <div class="range-bar">
                             <span class="range-chip">
-                                {detail?.count
-                                    ? `${detail.count} snapshots`
-                                    : 'Snapshot range'}
+                                {all
+                                    ? detail?.count
+                                        ? `all ${detail.count} snapshots`
+                                        : 'all snapshots'
+                                    : detail?.count
+                                      ? `${detail.count} snapshots`
+                                      : 'Snapshot range'}
                             </span>
-                            <span
-                                class="mono faint truncate"
-                                title={`${selectedFrom} → ${selectedHash}`}
-                            >
-                                {selectedFrom.slice(0, 8)} → {selectedHash.slice(0, 8)}
-                            </span>
+                            {#if all}
+                                <span class="mono faint truncate">since initialization</span>
+                            {:else}
+                                <span
+                                    class="mono faint truncate"
+                                    title={`${selectedFrom} → ${selectedHash}`}
+                                >
+                                    {selectedFrom?.slice(0, 8)} → {selectedHash?.slice(0, 8)}
+                                </span>
+                            {/if}
                             <button
                                 type="button"
                                 class="btn btn--ghost btn--sm"
-                                onclick={() => onSelect(selectedHash)}
+                                onclick={all ? onToggleAll : () => onSelect(selectedHash)}
                             >
-                                Single snapshot
+                                {all ? 'Clear' : 'Single snapshot'}
                             </button>
                         </div>
                     {/if}
                     <h3>{detail.subject}</h3>
-                    {#if detail.parent}
+                    {#if detail.parent && !all}
                         <p class="muted mono detail-parent" title={detail.parent}>
                             parent {detail.parent.slice(0, 12)}
                         </p>
                     {/if}
-                    {#if !selectedFrom}
+                    {#if !selectedFrom && !all}
                         <div class="label-row">
                             {#if labelEditing}
                                 <form class="label-form" onsubmit={saveLabel}>
@@ -771,6 +820,22 @@
         list-style: none;
     }
 
+    .timeline-tools {
+        display: flex;
+        margin: 0 0 6px;
+    }
+
+    .timeline-all {
+        width: 100%;
+        justify-content: center;
+        font-size: 10px;
+    }
+
+    .timeline-all.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+    }
+
     .timeline-entry {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -825,6 +890,10 @@
     }
 
     .kind--range {
+        color: var(--accent);
+    }
+
+    .kind--all {
         color: var(--accent);
     }
 
@@ -885,7 +954,7 @@
         flex-wrap: wrap;
         gap: 8px;
         align-items: center;
-        margin: 0 0 10px;
+        margin: 10px 0;
         padding: 5px 6px 5px 8px;
         border: 1px solid var(--line);
         border-radius: var(--radius-sm);

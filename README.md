@@ -187,7 +187,8 @@ five minutes.
 The status card shows `Recording: on`, the trigger engine (`watchexec` or `poll`), the diff renderer
 (`delta`, `difftastic` or `git diff`), total snapshots and the last snapshot time. A three-part strip
 summarizes the recorder state of all worktrees: **watching**, **polling** and **idle**. Every worktree row shows its state (`watching`, `polling`, `idle`,
-`paused`, `error`), `N snap` / `N snaps`, the snapshot age and the current poll interval on hover. The
+`paused`, `error`), `N snap` / `N snaps`, the snapshot age, the cumulative `+/-` diffstats for
+linked worktrees and the current poll interval on hover. The
 Activity list keeps one entry per worktree: a new snapshot or error replaces the previous entry for
 that worktree. Linked worktrees show the cumulative added and deleted lines since initialization;
 the main worktree deliberately stays without diffstats. The newest entry per worktree is persisted
@@ -235,13 +236,22 @@ and then every `interval`.
 
 Every worktree has a timeline from its history branch. The log icon on a worktree row opens a drawer
 with the snapshots newest first, a relative file filter and pagination. Selecting a snapshot shows
-the changed files and the patch; `base:` and `archive:` roots are labelled. The newest page refreshes
-when SSE reports a new snapshot.
+the changed files and the patch; `base:` and `archive:` roots are labelled. **Select all** combines
+every visible snapshot into one worktree diff and keeps following new snapshots while the drawer is
+open. The newest page refreshes when SSE reports a new snapshot.
+
+A new linked worktree starts with a hidden initialization window. While the checkout or setup is
+still settling, snapshots that only add files stay part of the hidden source copy; the recorder
+checks for a quiet period after each one, ends the window at the first tracked edit, and records the
+baseline in `refs/tachograph/init/<worktree>`. The main worktree keeps its complete history. Stores
+created before this marker existed use a read-time fallback over the leading addition-only snapshots,
+so an initialization that was split over multiple snapshots stays hidden there too.
 
 ```text
 GET  /api/v1/timeline?path=<worktree>&limit=50&offset=0&file=<relative path>
 GET  /api/v1/snapshot?path=<worktree>&hash=<commit>&file=<relative path>
 GET  /api/v1/range?path=<worktree>&from=<older>&to=<newer>&file=<relative path>
+GET  /api/v1/worktree-diff?path=<worktree>&file=<relative path>
 PUT  /api/v1/snapshot/label  {"path": "...", "hash": "...", "label": "before refactor"}
 POST /api/v1/revert    {"path": "...", "from": "...", "to": "..."}
 ```
@@ -344,8 +354,11 @@ is the stable identity; the slug is there to keep the paths readable.
 
 Each worktree gets its own branch (`wt/<worktree-dir>`) and index. A snapshot is a commit in that
 branch with the message `snap: <RFC3339> [<branch>@<head>]`; the initial commit is
-`base: history initialized`. The project's own branches, index and reflog stay untouched. Use
-`history.root` in the config or `--data-dir DIR` to keep the history somewhere else.
+`base: history initialized`. The hidden initialization baseline lives in
+`refs/tachograph/init/<worktree-dir>`; compaction moves it together with the rewritten branch and
+drops it when the baseline is folded into an `archive:` root. The project's own branches, index and
+reflog stay untouched. Use `history.root` in the config or `--data-dir DIR` to keep the history
+somewhere else.
 
 ### Icons
 

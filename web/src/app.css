@@ -1013,6 +1013,13 @@ details[open] > summary .panel-caret {
     white-space: nowrap;
 }
 
+.worktree-row__stats {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
 .worktree-row .icon-btn--inline {
     color: var(--faint);
 }

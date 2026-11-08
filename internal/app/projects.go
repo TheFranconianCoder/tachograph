@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/TheFranconianCoder/tachograph/internal/history"
 )
 
 // ProjectStatus is the UI/API view of a discovered project.
@@ -37,6 +39,10 @@ type WorktreeStatus struct {
 	Snapshots    int    `json:"snapshots,omitempty"`
 	IntervalMs   int    `json:"intervalMs,omitempty"`
 	WatcherError string `json:"watcherError,omitempty"`
+	// Stats describe the cumulative change since initialization. Linked
+	// worktrees show them in the project list; the main worktree stays without
+	// numbers because it is the source tree.
+	Stats *history.ChangeStats `json:"stats,omitempty"`
 }
 
 func (a *App) projectsSnapshot() []ProjectStatus {
@@ -66,6 +72,24 @@ func (a *App) projectsSnapshot() []ProjectStatus {
 		}
 	}
 
+	// Linked worktrees show the same +/- numbers as the activity table. The
+	// main checkout is the source tree and deliberately stays without stats.
+	stats := a.worktreeStats()
+	for i := range projects {
+		for j := range projects[i].Worktrees {
+			worktree := &projects[i].Worktrees[j]
+			if samePath(worktree.Path, projects[i].MainWorktree) {
+				continue
+			}
+			value, ok := stats[filepath.Clean(worktree.Path)]
+			if !ok || value == nil {
+				continue
+			}
+			copied := *value
+			worktree.Stats = &copied
+		}
+	}
+
 	// Projects are ordered by activity: the newest snapshot first. Inside a
 	// project the main worktree is pinned to the top, the others follow by
 	// activity: the newest snapshot first.
@@ -86,6 +110,20 @@ func (a *App) projectsSnapshot() []ProjectStatus {
 	})
 
 	return projects
+}
+
+// worktreeStats returns the newest cumulative diffstats per worktree. The
+// activity map already holds exactly the values shown in the activity table.
+func (a *App) worktreeStats() map[string]*history.ChangeStats {
+	a.activityMu.Lock()
+	defer a.activityMu.Unlock()
+	stats := make(map[string]*history.ChangeStats, len(a.activity))
+	for path, entry := range a.activity {
+		if entry.Stats != nil {
+			stats[filepath.Clean(path)] = entry.Stats
+		}
+	}
+	return stats
 }
 
 // sortWorktrees pins the main worktree to the first position and orders the

@@ -523,3 +523,87 @@ func canonical(t *testing.T, path string) string {
 	}
 	return resolved
 }
+
+func TestInitializationStateWaitsForFirstFiles(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	project := filepath.Join(base, "project")
+	worktree := filepath.Join(base, "worktree")
+	store := New(filepath.Join(base, "history"))
+
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, project, "init", "-b", "main")
+	mustGit(t, project, "config", "user.name", "Test")
+	mustGit(t, project, "config", "user.email", "test@example.com")
+	mustGit(t, project, "config", "commit.gpgsign", "false")
+	mustGit(t, project, "commit", "--allow-empty", "-m", "base")
+	mustGit(t, project, "worktree", "add", "-b", "feature", worktree)
+
+	recorder, err := store.Ensure(ctx, worktree)
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if !recorder.Initializing() {
+		t.Fatal("a fresh worktree did not start in initialization")
+	}
+
+	known, err := store.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	found := false
+	for _, entry := range known {
+		if filepath.Clean(entry.Path) != filepath.Clean(worktree) {
+			continue
+		}
+		found = true
+		if entry.InitAt == "" || entry.InitDone {
+			t.Errorf("known init state = %q/%v, want an open initialization", entry.InitAt, entry.InitDone)
+		}
+		if !store.RecorderFromKnown(entry).Initializing() {
+			t.Error("RecorderFromKnown lost the open initialization")
+		}
+	}
+	if !found {
+		t.Fatal("List did not return the worktree")
+	}
+
+	// A live Git index lock means the checkout is still running. The recorder
+	// must defer instead of staging a half-finished tree.
+	lock := filepath.Join(gitDirForWorktree(worktree), "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := recorder.Snapshot(ctx); !errors.Is(err, ErrWorktreeBusy) {
+		t.Fatalf("locked snapshot error = %v, want ErrWorktreeBusy", err)
+	}
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
+
+	// The worktree is still empty because the checkout has not produced files
+	// yet. That must not be mistaken for a completed initialization.
+	if _, err := recorder.Snapshot(ctx); !errors.Is(err, ErrWorktreeBusy) {
+		t.Fatalf("empty snapshot error = %v, want ErrWorktreeBusy", err)
+	}
+	if !recorder.Initializing() {
+		t.Fatal("empty snapshot closed the initialization window")
+	}
+
+	writeFile(t, filepath.Join(worktree, "a.txt"), "one\n")
+	first, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	if !first.Initial {
+		t.Fatal("first snapshot is not part of the initialization")
+	}
+	if _, err := recorder.Snapshot(ctx); !errors.Is(err, ErrNoChanges) {
+		t.Fatalf("quiet snapshot error = %v, want ErrNoChanges", err)
+	}
+	if recorder.Initializing() {
+		t.Fatal("quiet check did not close the initialization window")
+	}
+}

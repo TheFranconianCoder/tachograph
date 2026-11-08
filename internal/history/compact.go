@@ -82,6 +82,9 @@ func (s *Store) compactProjectAt(ctx context.Context, projectDir string, opts Re
 		}
 		result.Branches++
 
+		initRef := initRefForBranch(ref)
+		initTarget := refValue(ctx, repo, initRef)
+
 		commits, err := branchCommits(ctx, repo, ref)
 		if err != nil {
 			return result, err
@@ -115,6 +118,15 @@ func (s *Store) compactProjectAt(ctx context.Context, projectDir string, opts Re
 		}
 		if _, stderr, err := runGitRaw(ctx, repo, "update-ref", ref, newTip, oldTip); err != nil {
 			return result, fmt.Errorf("update %s: %w (%s)", ref, err, strings.TrimSpace(stderr))
+		}
+		if initTarget != "" {
+			if mapped, ok := branchRemap[initTarget]; ok {
+				if _, stderr, err := runGitRaw(ctx, repo, "update-ref", initRef, mapped); err != nil {
+					return result, fmt.Errorf("remap %s: %w (%s)", initRef, err, strings.TrimSpace(stderr))
+				}
+			} else if _, stderr, err := runGitRaw(ctx, repo, "update-ref", "-d", initRef); err != nil {
+				return result, fmt.Errorf("drop %s: %w (%s)", initRef, err, strings.TrimSpace(stderr))
+			}
 		}
 		result.Rewritten++
 		result.Kept += plan.kept
@@ -274,6 +286,25 @@ func planRetention(commits []commitInfo, now time.Time, opts RetentionOptions) r
 func weekKey(at time.Time) string {
 	year, week := at.UTC().ISOWeek()
 	return fmt.Sprintf("%04d-W%02d", year, week)
+}
+
+// initRefForBranch maps a history branch to its initialization baseline ref.
+func initRefForBranch(ref string) string {
+	dir := strings.TrimPrefix(ref, "refs/heads/wt/")
+	if dir == ref {
+		dir = filepath.Base(ref)
+	}
+	return initRefPrefix + dir
+}
+
+// refValue returns a ref's commit hash, or an empty string when it does not
+// exist or cannot be read.
+func refValue(ctx context.Context, repo, ref string) string {
+	hash, err := runGit(ctx, repo, "rev-parse", "--verify", "--quiet", ref)
+	if err != nil {
+		return ""
+	}
+	return hash
 }
 
 // rewriteBranch rebuilds the branch from the kept commits. With Archive, the

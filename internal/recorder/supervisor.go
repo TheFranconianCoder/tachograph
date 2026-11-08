@@ -18,6 +18,8 @@ import (
 const (
 	snapshotTimeout = 30 * time.Second
 	errorBackoff    = 30 * time.Second
+	busyRetry       = time.Second
+	initSettleDelay = 5 * time.Second
 	schedulerIdle   = time.Hour
 	minSchedulerGap = 10 * time.Millisecond
 )
@@ -43,9 +45,11 @@ type Options struct {
 	Interval time.Duration
 	// MaxInterval is the idle (slow) poll interval.
 	MaxInterval time.Duration
-	Workers     int
-	Log         *slog.Logger
-	OnEvent     func(Event)
+	// SettleInterval is the quiet check after an initialization snapshot.
+	SettleInterval time.Duration
+	Workers        int
+	Log            *slog.Logger
+	OnEvent        func(Event)
 }
 
 // Status is the live state of one recorder.
@@ -78,11 +82,12 @@ type entry struct {
 
 // Supervisor owns the active recorders and their poll schedule.
 type Supervisor struct {
-	minInterval time.Duration
-	maxInterval time.Duration
-	workers     int
-	log         *slog.Logger
-	onEvent     func(Event)
+	minInterval    time.Duration
+	maxInterval    time.Duration
+	settleInterval time.Duration
+	workers        int
+	log            *slog.Logger
+	onEvent        func(Event)
 
 	mu      sync.RWMutex
 	entries map[string]*entry
@@ -106,6 +111,10 @@ func New(opts Options) *Supervisor {
 	if maxInterval < minInterval {
 		maxInterval = minInterval
 	}
+	settleInterval := opts.SettleInterval
+	if settleInterval <= 0 {
+		settleInterval = initSettleDelay
+	}
 	workers := opts.Workers
 	if workers <= 0 {
 		workers = 4
@@ -115,13 +124,14 @@ func New(opts Options) *Supervisor {
 		log = slog.Default()
 	}
 	return &Supervisor{
-		minInterval: minInterval,
-		maxInterval: maxInterval,
-		workers:     workers,
-		log:         log,
-		onEvent:     opts.OnEvent,
-		entries:     make(map[string]*entry),
-		wake:        make(chan struct{}, 1),
+		minInterval:    minInterval,
+		maxInterval:    maxInterval,
+		settleInterval: settleInterval,
+		workers:        workers,
+		log:            log,
+		onEvent:        opts.OnEvent,
+		entries:        make(map[string]*entry),
+		wake:           make(chan struct{}, 1),
 	}
 }
 
@@ -300,6 +310,9 @@ func (s *Supervisor) snapshot(ctx context.Context, item *entry) {
 		item.lastError = ""
 		item.backoffUntil = time.Time{}
 		item.interval = nextInterval(item.interval, s.maxInterval)
+	case errors.Is(err, history.ErrWorktreeBusy):
+		item.lastError = ""
+		item.backoffUntil = time.Time{}
 	case err != nil:
 		item.lastError = err.Error()
 		item.backoffUntil = now.Add(errorBackoff)
@@ -315,8 +328,18 @@ func (s *Supervisor) snapshot(ctx context.Context, item *entry) {
 	switch {
 	case pending:
 		item.nextPoll = now
+	case errors.Is(err, history.ErrWorktreeBusy):
+		item.nextPoll = now.Add(busyRetry)
 	case err != nil && !errors.Is(err, history.ErrNoChanges):
 		item.nextPoll = item.backoffUntil
+	case err == nil && snapshot.Initial:
+		// The quiet check is what turns the initialization window into a
+		// completed baseline. Keep a faster poll cadence when one is active.
+		settle := s.settleInterval
+		if item.interval < settle {
+			settle = item.interval
+		}
+		item.nextPoll = now.Add(settle)
 	default:
 		item.nextPoll = now.Add(item.interval)
 	}
@@ -329,6 +352,8 @@ func (s *Supervisor) snapshot(ctx context.Context, item *entry) {
 	switch {
 	case errors.Is(err, history.ErrNoChanges):
 		s.log.Debug("worktree unchanged", "path", item.path)
+	case errors.Is(err, history.ErrWorktreeBusy):
+		s.log.Debug("worktree busy, snapshot deferred", "path", item.path)
 	case err != nil:
 		s.log.Warn("snapshot failed", "path", item.path, "err", err)
 		s.emit(Event{Time: now, Path: item.path, Kind: "error", Message: err.Error()})

@@ -589,3 +589,232 @@ func TestSnapshotRange(t *testing.T) {
 		t.Error("RangeDetail accepted reversed endpoints")
 	}
 }
+
+func TestInitializationWindowHidesBurstAndEndsOnEdit(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "part1.txt"), "one\n")
+	first, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	if !first.Initial {
+		t.Fatal("first snapshot is not marked as initialization")
+	}
+
+	writeFile(t, filepath.Join(worktree, "part2.txt"), "two\n")
+	second, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if !second.Initial {
+		t.Fatal("second addition snapshot is not marked as initialization")
+	}
+	if !recorder.Initializing() {
+		t.Fatal("initialization ended before the worktree was quiet")
+	}
+
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline during initialization: %v", err)
+	}
+	if len(page.Entries) != 0 {
+		t.Errorf("timeline during initialization = %+v, want no entries", page.Entries)
+	}
+	if ref := recorder.initRefHash(ctx); ref != second.Hash {
+		t.Errorf("init baseline = %q, want the second init snapshot %q", ref, second.Hash)
+	}
+
+	writeFile(t, filepath.Join(worktree, "keep.txt"), "real edit\n")
+	third, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("edit snapshot: %v", err)
+	}
+	if third.Initial {
+		t.Fatal("a tracked modification was still treated as initialization")
+	}
+	if recorder.Initializing() {
+		t.Fatal("initialization is still open after a tracked modification")
+	}
+	if got, err := recorder.Config(ctx, initConfigDone); err != nil || got != "true" {
+		t.Errorf("initDone = %q (%v), want true", got, err)
+	}
+	if ref := recorder.initRefHash(ctx); ref != second.Hash {
+		t.Errorf("init baseline moved to %q, want %q", ref, second.Hash)
+	}
+
+	page, err = recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline after initialization: %v", err)
+	}
+	if len(page.Entries) != 1 || page.Entries[0].Hash != third.Hash {
+		t.Errorf("timeline = %+v, want only the real edit", page.Entries)
+	}
+
+	// A new file after the window is normal work, not initialization.
+	writeFile(t, filepath.Join(worktree, "later.txt"), "later\n")
+	later, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("later snapshot: %v", err)
+	}
+	page, err = recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline after later snapshot: %v", err)
+	}
+	if len(page.Entries) != 2 || page.Entries[0].Hash != later.Hash {
+		t.Errorf("timeline = %+v, want the later file and the real edit", page.Entries)
+	}
+}
+
+func TestInitializationQuietCheckCompletes(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "part1.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	if !recorder.Initializing() {
+		t.Fatal("initialization ended before the quiet check")
+	}
+
+	if _, err := recorder.Snapshot(ctx); !errors.Is(err, ErrNoChanges) {
+		t.Fatalf("quiet snapshot error = %v, want ErrNoChanges", err)
+	}
+	if recorder.Initializing() {
+		t.Fatal("initialization is still open after the quiet check")
+	}
+
+	writeFile(t, filepath.Join(worktree, "later.txt"), "later\n")
+	later, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("later snapshot: %v", err)
+	}
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline: %v", err)
+	}
+	if len(page.Entries) != 1 || page.Entries[0].Hash != later.Hash {
+		t.Errorf("timeline = %+v, want the later file", page.Entries)
+	}
+}
+
+func TestLegacyInitializationPrefixStaysHidden(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "part1.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "part2.txt"), "two\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "keep.txt"), "real edit\n")
+	edit, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("edit snapshot: %v", err)
+	}
+
+	// Simulate a store created before the explicit baseline existed: no ref and
+	// no init keys. The read-time fallback must hide both addition-only
+	// snapshots and stop at the tracked edit.
+	mustGit(t, recorder.Placeholder, "update-ref", "-d", initRefName(recorder.Worktree.Dir))
+	for _, key := range []string{initConfigAt, initConfigDone, initConfigFirst} {
+		mustGit(t, recorder.Placeholder, "config", "--worktree", "--unset", key)
+	}
+
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline: %v", err)
+	}
+	if len(page.Entries) != 1 || page.Entries[0].Hash != edit.Hash {
+		t.Errorf("legacy timeline = %+v, want only the tracked edit", page.Entries)
+	}
+}
+
+func TestWorktreeDetailCombinesAllVisibleSnapshots(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "part1.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("first init snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "part2.txt"), "two\n")
+	second, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("second init snapshot: %v", err)
+	}
+	if _, err := recorder.Snapshot(ctx); !errors.Is(err, ErrNoChanges) {
+		t.Fatalf("quiet snapshot error = %v, want ErrNoChanges", err)
+	}
+
+	writeFile(t, filepath.Join(worktree, "keep.txt"), "real edit\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("edit snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "later.txt"), "later\n")
+	later, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("later snapshot: %v", err)
+	}
+
+	detail, err := recorder.WorktreeDetail(ctx)
+	if err != nil {
+		t.Fatalf("WorktreeDetail: %v", err)
+	}
+	if detail.Kind != "all" {
+		t.Errorf("kind = %q, want all", detail.Kind)
+	}
+	if detail.Hash != later.Hash {
+		t.Errorf("hash = %q, want newest snapshot %q", detail.Hash, later.Hash)
+	}
+	if detail.From != second.Hash {
+		t.Errorf("from = %q, want the hidden baseline %q", detail.From, second.Hash)
+	}
+	if detail.Count != 2 {
+		t.Errorf("count = %d, want 2 visible snapshots", detail.Count)
+	}
+	if len(detail.Files) != 2 {
+		t.Fatalf("files = %+v, want keep.txt and later.txt", detail.Files)
+	}
+	for _, file := range detail.Files {
+		if file.Path == "part1.txt" || file.Path == "part2.txt" {
+			t.Errorf("initialization file leaked into the worktree diff: %+v", file)
+		}
+	}
+	if !strings.Contains(detail.Diff, "+real edit") || !strings.Contains(detail.Diff, "+later") {
+		t.Errorf("diff does not contain both visible changes:\n%s", detail.Diff)
+	}
+
+	if _, err := recorder.WorktreeDetail(ctx, "part1.txt"); !errors.Is(err, ErrFileNotInSnapshot) {
+		t.Errorf("WorktreeDetail(part1.txt) error = %v, want ErrFileNotInSnapshot", err)
+	}
+	scoped, err := recorder.WorktreeDetail(ctx, "later.txt")
+	if err != nil {
+		t.Fatalf("WorktreeDetail(later.txt): %v", err)
+	}
+	if scoped.File != "later.txt" {
+		t.Errorf("scoped file = %q, want later.txt", scoped.File)
+	}
+	if strings.Contains(scoped.Diff, "keep.txt") || !strings.Contains(scoped.Diff, "later.txt") {
+		t.Errorf("scoped diff does not only contain later.txt:\n%s", scoped.Diff)
+	}
+
+	// HEAD is resolved per request, so a new snapshot is part of the next view.
+	writeFile(t, filepath.Join(worktree, "newer.txt"), "newer\n")
+	newer, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("newer snapshot: %v", err)
+	}
+	detail, err = recorder.WorktreeDetail(ctx)
+	if err != nil {
+		t.Fatalf("WorktreeDetail after newer snapshot: %v", err)
+	}
+	if detail.Hash != newer.Hash || detail.Count != 3 {
+		t.Errorf("live detail = hash %q count %d, want %q/3", detail.Hash, detail.Count, newer.Hash)
+	}
+}

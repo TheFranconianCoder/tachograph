@@ -92,6 +92,7 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/timeline", a.handleTimeline)
 	mux.HandleFunc("GET /api/v1/snapshot", a.handleSnapshot)
 	mux.HandleFunc("GET /api/v1/range", a.handleRange)
+	mux.HandleFunc("GET /api/v1/worktree-diff", a.handleWorktreeDiff)
 	mux.HandleFunc("PUT /api/v1/snapshot/label", a.handleSetLabel)
 	mux.HandleFunc("POST /api/v1/revert", a.handleRevert)
 	mux.HandleFunc("GET /api/v1/roots", a.handleRootsList)
@@ -298,6 +299,36 @@ func (a *App) handleRange(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, history.ErrFileNotInSnapshot) {
 		writeError(w, http.StatusNotFound, "file not found in this range")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, detail)
+}
+
+func (a *App) handleWorktreeDiff(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" {
+		writeError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	files, err := queryFiles(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	recorder, err := a.recorderForPath(r.Context(), path)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	ctx := history.WithDiffTheme(r.Context(), r.URL.Query().Get("theme"))
+	detail, err := recorder.WorktreeDetail(ctx, files...)
+	if errors.Is(err, history.ErrFileNotInSnapshot) {
+		writeError(w, http.StatusNotFound, "file not found in the worktree history")
 		return
 	}
 	if err != nil {

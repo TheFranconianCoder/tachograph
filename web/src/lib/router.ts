@@ -9,6 +9,7 @@ export type Route =
           hash: string | null;
           from: string | null;
           files: string[];
+          all: boolean;
       };
 
 const timelinePattern = /^\/timeline\/([0-9a-f]{6,40})(?:\/([0-9a-f]{7,40}))?\/?$/;
@@ -28,6 +29,7 @@ export function parseRoute(pathname: string, search = ''): Route {
         hash: match[2] ?? null,
         from: from && from.trim() ? from : null,
         files,
+        all: params.get('all') === '1',
     };
 }
 
@@ -35,11 +37,13 @@ export function timelineURL(
     worktreeID: string,
     hash?: string | null,
     files: string[] = [],
-    from?: string | null
+    from?: string | null,
+    all = false
 ): string {
     const base = hash ? `/timeline/${worktreeID}/${hash}` : `/timeline/${worktreeID}`;
     const params = new URLSearchParams();
     if (from) params.set('from', from);
+    if (all) params.set('all', '1');
     for (const file of files) params.append('file', file);
     const query = params.toString();
     return query ? `${base}?${query}` : base;

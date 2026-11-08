@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // KnownWorktree is one worktree discovered from the history store rather than
@@ -24,6 +25,9 @@ type KnownWorktree struct {
 	HistoryBranch string
 	SetupHash     string
 	SetupAt       string
+	InitAt        string
+	InitFirst     string
+	InitDone      bool
 }
 
 // List enumerates the existing placeholders below the history root.
@@ -100,6 +104,9 @@ func (s *Store) List(ctx context.Context) ([]KnownWorktree, error) {
 				HistoryBranch: historyBranch,
 				SetupHash:     config["local-history.setupHash"],
 				SetupAt:       config["local-history.setupAt"],
+				InitAt:        config[initConfigAt],
+				InitFirst:     config[initConfigFirst],
+				InitDone:      strings.EqualFold(config[initConfigDone], "true"),
 			})
 		}
 	}
@@ -167,9 +174,10 @@ func unquoteConfigValue(value string) string {
 	return value
 }
 
-// commonDirForWorktree reads the .git pointer instead of spawning git. A linked
-// worktree's .git file points at <common>/.git/worktrees/<name>.
-func commonDirForWorktree(worktree string) string {
+// gitDirForWorktree reads the .git pointer instead of spawning git. A linked
+// worktree's .git file points at <common>/.git/worktrees/<name>; the main
+// worktree's .git is the directory itself.
+func gitDirForWorktree(worktree string) string {
 	gitPath := filepath.Join(worktree, ".git")
 	info, err := os.Stat(gitPath)
 	if err != nil {
@@ -192,7 +200,19 @@ func commonDirForWorktree(worktree string) string {
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(worktree, gitDir)
 	}
-	gitDir = filepath.Clean(gitDir)
+	return filepath.Clean(gitDir)
+}
+
+// commonDirForWorktree returns the shared Git directory for a linked worktree.
+// The main worktree keeps its own .git directory.
+func commonDirForWorktree(worktree string) string {
+	gitDir := gitDirForWorktree(worktree)
+	if gitDir == "" {
+		return ""
+	}
+	if filepath.Base(gitDir) == ".git" {
+		return gitDir
+	}
 	if parent := filepath.Dir(gitDir); filepath.Base(parent) == "worktrees" {
 		return filepath.Dir(parent)
 	}
@@ -236,6 +256,11 @@ func (s *Store) RemoveWorktree(ctx context.Context, known KnownWorktree) error {
 	if _, stderr, err := runGitRaw(ctx, repo, "update-ref", "-d", "refs/heads/"+branch); err != nil {
 		return fmt.Errorf("delete history branch %s: %w (%s)", branch, err, strings.TrimSpace(stderr))
 	}
+	// The initialization baseline belongs to the deleted branch. It must go
+	// before the GC, otherwise it would pin the branch's objects forever.
+	if _, _, err := runGitRaw(ctx, repo, "update-ref", "-d", initRefName(known.WorktreeDir)); err != nil {
+		return fmt.Errorf("delete initialization baseline of %s: %w", known.WorktreeDir, err)
+	}
 
 	remaining, err := runGit(ctx, repo, "for-each-ref", "--format=%(refname)", "refs/heads/wt/")
 	if err != nil {
@@ -267,7 +292,7 @@ func (s *Store) RecorderFromKnown(known KnownWorktree) *Recorder {
 	if id == "" {
 		id = shortHash(known.Path, 12)
 	}
-	return &Recorder{
+	recorder := &Recorder{
 		Project: Project{
 			Dir:          known.ProjectDir,
 			CommonDir:    known.CommonDir,
@@ -280,11 +305,19 @@ func (s *Store) RecorderFromKnown(known KnownWorktree) *Recorder {
 			HistoryBranch: known.HistoryBranch,
 			Dir:           known.WorktreeDir,
 		},
-		HistoryRepo: filepath.Join(s.Root, known.ProjectDir, "repo"),
-		Placeholder: filepath.Join(s.Root, known.ProjectDir, "worktrees", known.WorktreeDir),
-		Diff:        s.Diff,
-		lock:        s.repoLock(known.ProjectDir),
+		HistoryRepo:    filepath.Join(s.Root, known.ProjectDir, "repo"),
+		Placeholder:    filepath.Join(s.Root, known.ProjectDir, "worktrees", known.WorktreeDir),
+		Diff:           s.Diff,
+		lock:           s.repoLock(known.ProjectDir),
+		worktreeGitDir: gitDirForWorktree(known.Path),
 	}
+	recorder.initManaged = known.InitAt != ""
+	if recorder.initManaged {
+		recorder.initAt, _ = time.Parse(time.RFC3339, known.InitAt)
+		recorder.initFirst, _ = time.Parse(time.RFC3339, known.InitFirst)
+		recorder.initPending.Store(!known.InitDone)
+	}
+	return recorder
 }
 
 // mainWorktreeFromCommonDir derives the main worktree from a normal

@@ -75,6 +75,20 @@ export async function fetchRange(
     return (await response.json()) as SnapshotDetail;
 }
 
+export async function fetchWorktreeDiff(
+    path: string,
+    files: string[] = [],
+    theme = 'dark'
+): Promise<SnapshotDetail> {
+    const params = new URLSearchParams({ path, theme });
+    for (const file of files) params.append('file', file);
+    const response = await fetch(`/api/v1/worktree-diff?${params}`, {
+        headers: { accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error(await errorMessage(response));
+    return (await response.json()) as SnapshotDetail;
+}
+
 export async function fetchSnapshot(
     path: string,
     hash: string,

@@ -1,7 +1,15 @@
 <script lang="ts">
     import Icon from './ui/Icon.svelte';
     import Lamp from './ui/Lamp.svelte';
-    import { baseName, lifecycleTitle, progressTitle, relativeTime, watcherTitle } from '../lib/format';
+    import {
+        baseName,
+        changeTitle,
+        formatCount,
+        lifecycleTitle,
+        progressTitle,
+        relativeTime,
+        watcherTitle,
+    } from '../lib/format';
     import type { Worktree } from '../lib/types';
 
     interface Props {
@@ -49,6 +57,13 @@
         {snaps} {snaps === 1 ? 'snap' : 'snaps'}
         {#if worktree.lastSnapshot}
             · {relativeTime(worktree.lastSnapshot, now)}
+        {/if}
+        {#if worktree.stats}
+            <span class="activity-sep">·</span>
+            <span class="worktree-row__stats" title={changeTitle(worktree.stats)}>
+                <span class="activity-added">+{formatCount(worktree.stats.added)}</span>
+                <span class="activity-deleted">-{formatCount(worktree.stats.deleted)}</span>
+            </span>
         {/if}
         <button
             type="button"

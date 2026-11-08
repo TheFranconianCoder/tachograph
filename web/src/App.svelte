@@ -159,9 +159,18 @@
         navigate(timelineURL(route.worktreeID, to, [], from));
     }
 
+    function toggleAll(): void {
+        if (route.name !== 'timeline') return;
+        if (route.all) {
+            navigate(timelineURL(route.worktreeID, null, [], null, false));
+            return;
+        }
+        navigate(timelineURL(route.worktreeID, null, [], null, true));
+    }
+
     function selectFiles(files: string[]): void {
-        if (route.name !== 'timeline' || !route.hash) return;
-        navigate(timelineURL(route.worktreeID, route.hash, files, route.from));
+        if (route.name !== 'timeline' || (!route.hash && !route.all)) return;
+        navigate(timelineURL(route.worktreeID, route.hash, files, route.from, route.all));
     }
 
     function closeTimeline(): void {
@@ -540,8 +549,10 @@
                 selectedHash={route.name === 'timeline' ? route.hash : null}
                 selectedFrom={route.name === 'timeline' ? route.from : null}
                 selectedFiles={route.name === 'timeline' ? route.files : []}
+                all={route.name === 'timeline' ? route.all : false}
                 onSelect={selectSnapshot}
                 onSelectRange={selectRange}
+                onToggleAll={toggleAll}
                 onSelectFiles={selectFiles}
                 onClose={closeTimeline}
             />

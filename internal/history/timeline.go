@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TheFranconianCoder/tachograph/internal/difft"
 )
@@ -130,13 +131,17 @@ func (r *Recorder) Timeline(ctx context.Context, limit, offset int, file string)
 
 // timelineLowerBound returns the newest commit that should stay out of the
 // timeline. The root is always a state, not a change: the initialization
-// commit, an archive root, or the first source copy. When that state is empty,
-// its first child is the source copy as well and is hidden too.
+// commit, an archive root, or the first source copy. For linked worktrees the
+// explicit initialization ref is authoritative; legacy stores fall back to the
+// leading run of addition-only snapshots.
 func (r *Recorder) timelineLowerBound(ctx context.Context) string {
 	// The project's main branch is the source of truth. Show its complete
 	// history, including the initialization state and the first copy.
 	if r.isMainWorktree() {
 		return ""
+	}
+	if baseline := r.initBaseline(ctx); baseline != "" {
+		return baseline
 	}
 
 	root, err := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
@@ -149,13 +154,141 @@ func (r *Recorder) timelineLowerBound(ctx context.Context) string {
 	}
 
 	lower := root
-	if strings.HasPrefix(subject, "base:") ||
-		(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, root)) {
-		if child := r.firstCommitAfter(ctx, root); child != "" {
-			lower = child
+	if !strings.HasPrefix(subject, "base:") &&
+		!(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, root)) {
+		return lower
+	}
+	first := r.firstCommitAfter(ctx, root)
+	if first == "" {
+		return lower
+	}
+	return r.legacyInitializationBound(ctx, root, first)
+}
+
+// initBaseline returns the recorded initialization baseline when it is still
+// part of this branch.
+func (r *Recorder) initBaseline(ctx context.Context) string {
+	hash := r.initRefHash(ctx)
+	if hash == "" {
+		return ""
+	}
+	if _, code, err := runGitStatus(ctx, r.Placeholder, "merge-base", "--is-ancestor", hash, "HEAD"); err != nil || code != 0 {
+		return ""
+	}
+	return hash
+}
+
+// legacyInitializationBound hides a leading run of addition-only snapshots that
+// belong to the same initialization burst. It is used for stores created before
+// the explicit init ref existed. A real edit or a pause ends the run, so a later
+// new file stays visible.
+func (r *Recorder) legacyInitializationBound(ctx context.Context, root, first string) string {
+	output, err := runGit(ctx, r.Placeholder, "log", "--reverse", "--format=%H%x00%aI", "--ancestry-path", root+"..HEAD")
+	if err != nil {
+		return first
+	}
+	type initCommit struct {
+		hash string
+		at   time.Time
+	}
+	commits := make([]initCommit, 0, 8)
+	for _, line := range strings.Split(output, "\n") {
+		parts := strings.SplitN(line, "\x00", 2)
+		if len(parts) != 2 {
+			continue
 		}
+		at, err := time.Parse(time.RFC3339, parts[1])
+		if err != nil {
+			continue
+		}
+		commits = append(commits, initCommit{hash: parts[0], at: at})
+	}
+	if len(commits) == 0 {
+		return first
+	}
+
+	lower := commits[0].hash
+	start := commits[0].at
+	previous := commits[0]
+	for i := 1; i < len(commits) && i < initLegacyMaxPrefix; i++ {
+		current := commits[i]
+		gap := current.at.Sub(previous.at)
+		if gap < 0 {
+			gap = -gap
+		}
+		if gap > initLegacyGap || current.at.Sub(start) > initLegacySpan {
+			break
+		}
+		if !r.onlyAddedBetween(ctx, previous.hash, current.hash) {
+			break
+		}
+		lower = current.hash
+		previous = current
 	}
 	return lower
+}
+
+// onlyAddedBetween reports whether the change between two commits contains no
+// modification, deletion, rename or type change.
+func (r *Recorder) onlyAddedBetween(ctx context.Context, from, to string) bool {
+	output, err := runGit(ctx, r.Placeholder, "diff-tree", "--no-commit-id", "--name-only", "-r", "--diff-filter=MDRTU", from, to)
+	return err == nil && strings.TrimSpace(output) == ""
+}
+
+// BackfillInitialization records the legacy initialization boundary as a ref.
+// It makes the first timeline read after an upgrade cheap and keeps the result
+// stable. The prefix must be old enough that it cannot still be growing.
+func (r *Recorder) BackfillInitialization(ctx context.Context) error {
+	if r.initManaged || r.isMainWorktree() || r.initRefHash(ctx) != "" {
+		return nil
+	}
+	return r.Exclusive(func() error {
+		if r.initRefHash(ctx) != "" {
+			return nil
+		}
+		root, err := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
+		if err != nil || root == "" {
+			return nil
+		}
+		subject, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%s", root)
+		if err != nil {
+			return nil
+		}
+		if !strings.HasPrefix(subject, "base:") &&
+			!(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, root)) {
+			return nil
+		}
+		first := r.firstCommitAfter(ctx, root)
+		if first == "" {
+			return nil
+		}
+		bound := r.legacyInitializationBound(ctx, root, first)
+		if bound == "" || bound == root {
+			return nil
+		}
+		date, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%aI", bound)
+		if err != nil {
+			return nil
+		}
+		at, err := time.Parse(time.RFC3339, date)
+		if err != nil || time.Since(at) < initAdoptWindow {
+			return nil
+		}
+		if err := r.setInitRef(ctx, bound); err != nil {
+			return err
+		}
+		// Mark the store as managed from now on so later scans skip the walk.
+		// initDone goes first: a partial write must never look like a new,
+		// unfinished initialization window.
+		if err := r.SetConfig(ctx, initConfigDone, "true"); err != nil {
+			return err
+		}
+		stamp := at.UTC().Format(time.RFC3339)
+		if err := r.SetConfig(ctx, initConfigAt, stamp); err != nil {
+			return err
+		}
+		return r.SetConfig(ctx, initConfigFirst, stamp)
+	})
 }
 
 // isMainWorktree reports whether this recorder belongs to the project's main
@@ -292,6 +425,78 @@ func (r *Recorder) RangeDetail(ctx context.Context, from, to string, files ...st
 				// The root is part of the selection and is not in start..to.
 				count++
 			}
+			detail.Count = count
+		}
+	}
+	return detail, nil
+}
+
+// WorktreeDetail returns the combined change from the hidden initialization
+// baseline to the newest snapshot. It is the "all snapshots" view: new
+// snapshots are included automatically because HEAD is resolved per request.
+func (r *Recorder) WorktreeDetail(ctx context.Context, files ...string) (SnapshotDetail, error) {
+	selected := cleanFileSelection(files)
+
+	head, err := runGit(ctx, r.Placeholder, "rev-parse", "HEAD")
+	if err != nil {
+		return SnapshotDetail{}, fmt.Errorf("resolve newest snapshot: %w", err)
+	}
+	if head == "" {
+		return SnapshotDetail{}, fmt.Errorf("resolve newest snapshot")
+	}
+	start := r.timelineLowerBound(ctx)
+	if start == "" {
+		root, rootErr := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
+		if rootErr != nil {
+			return SnapshotDetail{}, fmt.Errorf("resolve initialization baseline: %w", rootErr)
+		}
+		start = root
+	}
+	if start == "" {
+		return SnapshotDetail{}, fmt.Errorf("resolve initialization baseline")
+	}
+	if _, code, err := runGitStatus(ctx, r.Placeholder, "merge-base", "--is-ancestor", start, head); err != nil || code != 0 {
+		return SnapshotDetail{}, fmt.Errorf("initialization baseline is not part of this timeline")
+	}
+
+	detail, err := r.commitDetail(ctx, head)
+	if err != nil {
+		return SnapshotDetail{}, err
+	}
+	detail.Kind = "all"
+	detail.From = start
+	// The all view is not a single snapshot; labelling it would be ambiguous.
+	detail.Label = ""
+	if len(selected) > 0 {
+		detail.File = selected[0]
+	}
+	if start == head {
+		for _, file := range selected {
+			return SnapshotDetail{}, fmt.Errorf("%w: %s", ErrFileNotInSnapshot, file)
+		}
+		detail.Files = []SnapshotFile{}
+		return detail, nil
+	}
+
+	changed, truncated, err := r.changedFiles(ctx, start, head)
+	if err != nil {
+		return SnapshotDetail{}, err
+	}
+	detail.Files = changed
+	detail.Truncated = truncated
+	for _, file := range selected {
+		if !hasSnapshotFile(detail.Files, file) {
+			return SnapshotDetail{}, fmt.Errorf("%w: %s", ErrFileNotInSnapshot, file)
+		}
+	}
+	detail.Diff, detail.DiffTool, err = r.diffBetween(ctx, start, head, selected)
+	if err != nil {
+		return SnapshotDetail{}, err
+	}
+	detail.Diff, detail.Truncated = boundDiff(detail.Diff, detail.Truncated)
+
+	if output, err := runGit(ctx, r.Placeholder, "rev-list", "--count", start+".."+head); err == nil {
+		if count, err := strconv.Atoi(strings.TrimSpace(output)); err == nil {
 			detail.Count = count
 		}
 	}

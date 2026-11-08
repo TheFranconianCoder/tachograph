@@ -406,6 +406,9 @@ func (a *App) Scan(ctx context.Context) error {
 		}
 
 		recorder := a.historyStore.RecorderFromKnown(entry)
+		if err := recorder.BackfillInitialization(ctx); err != nil {
+			a.log.Debug("could not backfill initialization baseline", "path", entry.Path, "err", err)
+		}
 		if !a.supervisor.Has(entry.Path) {
 			summary, err := recorder.Summary(ctx)
 			if err != nil {
@@ -414,6 +417,9 @@ func (a *App) Scan(ctx context.Context) error {
 			a.observeLastSnapshot(entry.Path, summary.LastSnapshot)
 			a.supervisor.Set(entry.Path, recorder)
 			a.supervisor.Seed(entry.Path, summary.Snapshots, summary.LastSnapshot, summary.LastHash)
+		}
+		if recorder.Initializing() {
+			a.supervisor.Trigger(entry.Path)
 		}
 		activePaths[entry.Path] = true
 		addWorktree(key, project, status)
@@ -476,7 +482,11 @@ func (a *App) Scan(ctx context.Context) error {
 			// treat it as active so its watcher starts immediately.
 			a.markActive(recorder.Worktree.Path, time.Now())
 			activePaths[recorder.Worktree.Path] = true
-			addWorktree(key, status, buildStatus(recorder))
+			worktreeStatus := buildStatus(recorder)
+			addWorktree(key, status, worktreeStatus)
+			if recorder.Initializing() {
+				a.supervisor.Trigger(recorder.Worktree.Path)
+			}
 		}
 	}
 
