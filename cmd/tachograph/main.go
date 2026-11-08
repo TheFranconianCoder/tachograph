@@ -4,6 +4,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,6 +50,8 @@ func run(args []string) error {
 		return withConfigPath(func(path string) error { return cmdOpen(args[1:], path) })
 	case "status":
 		return withConfigPath(func(path string) error { return cmdStatus(args[1:], path) })
+	case "apply":
+		return withConfigPath(func(path string) error { return cmdApply(args[1:], path) })
 	case "history":
 		return withConfigPath(func(path string) error { return cmdHistory(args[1:], path) })
 	case "shell":
@@ -80,10 +83,15 @@ Usage:
   tachograph [app] [--headless] [--no-open] [--debug] [--config PATH] [--port N]   start the desktop app
   tachograph open [--config PATH] [--port N]                                    open the running UI
   tachograph status [--config PATH] [--port N]                                  print the status report
-  tachograph shell [--config PATH] [--port N] [WORKTREE]                        open a shell in a related worktree
+  tachograph apply [--config PATH] [--port N]                                   distribute copy rules from the root to its child worktrees
+  tachograph shell [--config PATH] [--port N] [WORKTREE]                        open a shell in a child worktree
   tachograph history init [--debug] [--data-dir DIR] [PATH]                       create/reuse a worktree's history store
   tachograph history snapshot [--debug] [--data-dir DIR] [PATH]                   snapshot a worktree
   tachograph version                                                            print the version
+
+Run apply from the root worktree. It copies the global and repository-local rules
+into every linked worktree of that project; from a linked worktree it exits with
+the root path.
 
 Run shell from the root worktree. It offers the linked worktrees of that project
 and exits with the root path when started from a linked worktree. WORKTREE
@@ -291,6 +299,84 @@ func cmdHistoryCommand(subcommand string, args []string, configPath string) erro
 	default:
 		return fmt.Errorf("unknown history command %q", subcommand)
 	}
+}
+
+func cmdApply(args []string, defaultConfig string) error {
+	flags := flag.NewFlagSet("apply", flag.ContinueOnError)
+	configPath := flags.String("config", defaultConfig, "config file")
+	port := flags.Int("port", 0, "override the configured port")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := app.LoadConfig(*configPath)
+	if err != nil {
+		return err
+	}
+	if *port != 0 {
+		cfg.Server.Port = *port
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve current directory: %w", err)
+	}
+	payload, err := json.Marshal(map[string]string{"path": cwd})
+	if err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	url := fmt.Sprintf("http://127.0.0.1:%d/api/v1/lifecycle/apply", cfg.Server.Port)
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 2 * time.Minute}
+	response, err := client.Do(request)
+	if err != nil {
+		return fmt.Errorf("tachograph is not running: %w", err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("read apply response: %w", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		var failure struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(body, &failure) == nil && failure.Error != "" {
+			return errors.New(failure.Error)
+		}
+		return fmt.Errorf("apply returned %s: %s", response.Status, strings.TrimSpace(string(body)))
+	}
+
+	var result struct {
+		Worktrees int      `json:"worktrees"`
+		Copied    int      `json:"copied"`
+		Errors    []string `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("decode apply response: %w", err)
+	}
+
+	if result.Worktrees == 0 {
+		fmt.Println("no child worktrees")
+	} else {
+		fmt.Printf("applied copy rules to %d worktree(s), copied %d file(s)\n", result.Worktrees, result.Copied)
+	}
+	if len(result.Errors) > 0 {
+		for _, failure := range result.Errors {
+			fmt.Fprintln(os.Stderr, "  ", failure)
+		}
+		return fmt.Errorf("%d worktree(s) failed", len(result.Errors))
+	}
+	return nil
 }
 
 func cmdShell(args []string, defaultConfig string) error {

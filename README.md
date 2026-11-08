@@ -177,9 +177,37 @@ support `*`, `?` and `[]` globs. A pattern without a match is skipped, existing 
 unless **Overwrite existing files** is enabled, and every copied path is excluded from the history
 store.
 
-**Save** changes the rules for worktrees discovered from then on. **Apply to existing** copies
-missing files into the worktrees that are already registered (copy actions only; setup commands are
-not re-run). Run commands such as `task setup` stay in `config.yaml`.
+**Save** changes the rules for worktrees discovered from then on. **Apply to existing** in the card,
+or `tachograph apply` from the root worktree, copies missing files into the registered worktrees
+(copy actions only; setup commands are not re-run). The CLI applies to the child worktrees of the
+current project and must run from the root worktree; from a linked worktree it exits with the root
+path. Run commands such as `task setup` stay in `config.yaml`.
+
+```bash
+cd ~/Code/thought-keeper   # the root worktree
+tachograph apply
+```
+
+A repository can add its own copy rules in `.tachograph.yaml` in the **main worktree**. The file
+applies to every worktree of the project and is read in addition to the global
+`worktrees.on_create` list:
+
+```yaml
+# .tachograph.yaml
+copy:
+  - .env.production
+  - config/*.yaml
+  - path: secrets/required.key
+    optional: false
+  - path: generated/config.yaml
+    overwrite: true
+```
+
+Entries are optional by default, so a missing source is skipped; `optional: false` makes one
+required. A project entry replaces a global entry with the same path, so a repository can change the
+`overwrite` or `optional` flag. Only copies are allowed here — `run` commands stay in the global
+config. The file is meant to be committed with the project. **Apply to existing** also applies the
+project rules.
 
 ```text
 GET  /api/v1/lifecycle

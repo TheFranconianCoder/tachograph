@@ -281,8 +281,6 @@ func (a *App) Scan(ctx context.Context) error {
 	a.notifyStatus()
 
 	started := time.Now()
-	mapped := mapActions(actions)
-	hash := actionsHash(actions)
 	var scanErrors []error
 
 	projectsByKey := make(map[string]*ProjectStatus)
@@ -330,7 +328,7 @@ func (a *App) Scan(ctx context.Context) error {
 		}
 	}
 
-	buildStatus := func(recorder *history.Recorder) WorktreeStatus {
+	buildStatus := func(recorder *history.Recorder, mapped []lifecycle.Action, hash string, configErr error) WorktreeStatus {
 		status := WorktreeStatus{
 			ID:          recorder.Worktree.ID,
 			Path:        recorder.Worktree.Path,
@@ -340,6 +338,7 @@ func (a *App) Scan(ctx context.Context) error {
 			Placeholder: recorder.Placeholder,
 			State:       "ready",
 		}
+		setupErr := configErr
 		if len(mapped) > 0 {
 			setup, err := lifecycle.Apply(ctx, recorder, lifecycle.Options{
 				Actions: mapped,
@@ -347,15 +346,18 @@ func (a *App) Scan(ctx context.Context) error {
 				Log:     a.log,
 			})
 			if err != nil {
-				status.State = "setup-error"
-				status.SetupState = "error"
-				status.Error = err.Error()
+				setupErr = err
 			} else {
 				status.Setup = setupLabel(setup)
 				status.SetupState = "ok"
 			}
 		} else {
 			status.SetupState = "none"
+		}
+		if setupErr != nil {
+			status.State = "setup-error"
+			status.SetupState = "error"
+			status.Error = setupErr.Error()
 		}
 		return status
 	}
@@ -441,6 +443,32 @@ func (a *App) Scan(ctx context.Context) error {
 			key = "name:" + project.Name
 		}
 		status := ensureProject(key, project.Name, project.CommonDir, project.MainWorktree)
+
+		// The repository-local config is read lazily: only a project with a new
+		// worktree needs it, and a broken file should not turn every scan into an
+		// error report.
+		var (
+			projectMapped []lifecycle.Action
+			projectHash   string
+			projectErr    error
+			projectLoaded bool
+		)
+		loadProjectSetup := func() {
+			if projectLoaded {
+				return
+			}
+			projectLoaded = true
+			projectActions, err := loadProjectActions(project.MainWorktree)
+			projectErr = err
+			if err != nil {
+				scanErrors = append(scanErrors, fmt.Errorf("project config in %s: %w", project.MainWorktree, err))
+				projectActions = nil
+			}
+			combined := mergeLifecycleActions(actions, projectActions)
+			projectMapped = mapActions(combined)
+			projectHash = actionsHash(combined)
+		}
+
 		for _, worktree := range project.Worktrees {
 			if location, ok := worktreeLocations[worktree.Path]; ok {
 				activePaths[worktree.Path] = true
@@ -482,7 +510,8 @@ func (a *App) Scan(ctx context.Context) error {
 			// treat it as active so its watcher starts immediately.
 			a.markActive(recorder.Worktree.Path, time.Now())
 			activePaths[recorder.Worktree.Path] = true
-			worktreeStatus := buildStatus(recorder)
+			loadProjectSetup()
+			worktreeStatus := buildStatus(recorder, projectMapped, projectHash, projectErr)
 			addWorktree(key, status, worktreeStatus)
 			if recorder.Initializing() {
 				a.supervisor.Trigger(recorder.Worktree.Path)

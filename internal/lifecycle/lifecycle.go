@@ -237,6 +237,12 @@ func cleanRelative(path string) (string, error) {
 	return cleanRelativePattern(path)
 }
 
+// CleanCopyPattern validates and normalizes a relative copy pattern. The app
+// uses it for repository-local configuration as well.
+func CleanCopyPattern(path string) (string, error) {
+	return cleanRelativePattern(path)
+}
+
 // cleanRelativePattern validates a relative copy pattern. Glob metacharacters
 // are allowed; escapes and the Git directory are not.
 func cleanRelativePattern(path string) (string, error) {

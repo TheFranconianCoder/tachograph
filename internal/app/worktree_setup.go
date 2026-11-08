@@ -2,12 +2,15 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/TheFranconianCoder/tachograph/internal/history"
 	"github.com/TheFranconianCoder/tachograph/internal/lifecycle"
 )
 
@@ -115,8 +118,19 @@ func (a *App) handleWorktreeSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleApplyWorktreeSetup(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Path string `json:"path"`
+	}
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	}
+	request.Path = strings.TrimSpace(request.Path)
+
 	a.mu.RLock()
-	actions := copyActions(mapActions(a.cfg.Worktrees.OnCreate))
+	globalActions := append([]LifecycleAction(nil), a.cfg.Worktrees.OnCreate...)
 	a.mu.RUnlock()
 
 	known, err := a.historyStore.List(r.Context())
@@ -124,6 +138,20 @@ func (a *App) handleApplyWorktreeSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if request.Path != "" {
+		project, err := a.rootProject(request.Path)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		known = filterProjectWorktrees(known, project)
+	}
+
+	type projectSetup struct {
+		actions []LifecycleAction
+		err     error
+	}
+	cache := make(map[string]projectSetup)
 
 	applied := 0
 	copied := 0
@@ -133,6 +161,19 @@ func (a *App) handleApplyWorktreeSetup(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		recorder := a.historyStore.RecorderFromKnown(entry)
+		mainWorktree := recorder.Project.MainWorktree
+
+		setup, ok := cache[mainWorktree]
+		if !ok {
+			projectActions, err := loadProjectActions(mainWorktree)
+			setup = projectSetup{actions: projectActions, err: err}
+			cache[mainWorktree] = setup
+		}
+		if setup.err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", entry.Path, setup.err))
+		}
+
+		actions := copyActions(mapActions(mergeLifecycleActions(globalActions, setup.actions)))
 		result, err := lifecycle.CopyOnly(recorder, actions, a.log)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", entry.Path, err))
@@ -146,6 +187,92 @@ func (a *App) handleApplyWorktreeSetup(w http.ResponseWriter, r *http.Request) {
 		"copied":    copied,
 		"errors":    failures,
 	})
+}
+
+// rootProject resolves the project whose root worktree contains path. A linked
+// worktree is rejected: apply is a root-only operation.
+func (a *App) rootProject(path string) (ProjectStatus, error) {
+	absolute, err := filepath.Abs(strings.TrimSpace(path))
+	if err != nil {
+		return ProjectStatus{}, fmt.Errorf("resolve path: %w", err)
+	}
+
+	projects := a.projectsSnapshot()
+	bestProject, bestWorktree, bestLength := -1, -1, 0
+	for projectIndex, project := range projects {
+		for worktreeIndex, worktree := range project.Worktrees {
+			if !pathWithin(worktree.Path, absolute) {
+				continue
+			}
+			if bestProject < 0 || len(worktree.Path) > bestLength {
+				bestProject, bestWorktree = projectIndex, worktreeIndex
+				bestLength = len(worktree.Path)
+			}
+		}
+	}
+	if bestProject < 0 {
+		return ProjectStatus{}, fmt.Errorf("%s is not inside a managed worktree", absolute)
+	}
+
+	project := projects[bestProject]
+	worktree := project.Worktrees[bestWorktree]
+	if project.MainWorktree == "" {
+		return ProjectStatus{}, fmt.Errorf("project %q has no root worktree", project.Name)
+	}
+	if !samePath(project.MainWorktree, worktree.Path) {
+		if samePath(absolute, worktree.Path) {
+			return ProjectStatus{}, fmt.Errorf("%s is a linked worktree; run tachograph apply from the root worktree %s",
+				absolute, project.MainWorktree)
+		}
+		return ProjectStatus{}, fmt.Errorf("%s is inside the linked worktree %s; run tachograph apply from the root worktree %s",
+			absolute, worktree.Path, project.MainWorktree)
+	}
+	return project, nil
+}
+
+// filterProjectWorktrees keeps the linked worktrees of one project. The root
+// worktree is the copy source and is not part of the distribution.
+func filterProjectWorktrees(known []history.KnownWorktree, project ProjectStatus) []history.KnownWorktree {
+	filtered := make([]history.KnownWorktree, 0, len(known))
+	for _, entry := range known {
+		if !sameProject(entry, project) {
+			continue
+		}
+		if samePath(entry.Path, project.MainWorktree) {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
+func sameProject(entry history.KnownWorktree, project ProjectStatus) bool {
+	if entry.CommonDir != "" && project.CommonDir != "" {
+		return samePath(entry.CommonDir, project.CommonDir)
+	}
+	for _, worktree := range project.Worktrees {
+		if samePath(worktree.Path, entry.Path) {
+			return true
+		}
+	}
+	return false
+}
+
+// pathWithin reports whether target is base itself or below it.
+func pathWithin(base, target string) bool {
+	if base == "" || target == "" {
+		return false
+	}
+	base = filepath.Clean(base)
+	target = filepath.Clean(target)
+	if samePath(base, target) {
+		return true
+	}
+	relative, err := filepath.Rel(base, target)
+	if err != nil {
+		return false
+	}
+	return relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator))
 }
 
 func copyActions(actions []lifecycle.Action) []lifecycle.Action {

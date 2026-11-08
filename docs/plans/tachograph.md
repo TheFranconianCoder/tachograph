@@ -280,6 +280,17 @@ detection and project-repository isolation.
   remains in `worktrees.on_create`, and glob expansions exclude every concrete copied path from the
   history store.
 
+- Per-repository config (done): `<main-worktree>/.tachograph.yaml` adds `copy` rules on top of the
+  global `worktrees.on_create` list. Entries are optional by default, a project path replaces a
+  global entry with the same path, and the file is parsed strictly so a typo or a pasted global
+  block is an error instead of silently doing nothing. Only copies are allowed; `run` commands stay
+  in the global config.
+
+- `tachograph apply` (done): run from the root worktree to distribute the global and
+  repository-local copy rules to every linked worktree of the project. The API rejects a linked
+  worktree and names the root path, so the GUI's global apply and the root-scoped CLI share the
+  same copy logic.
+
 - Action model (`copy`, `run`) with a per-worktree setup marker.
 - Default `.env` / `.env.local` copy from the main worktree.
 - Detection via discovery.

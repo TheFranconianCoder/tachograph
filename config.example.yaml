@@ -60,6 +60,8 @@ worktrees:
   # patterns:
   #   - ~/worktrees/*
   # Run once when a worktree is discovered, before the first snapshot.
+  # A repository can add its own copy rules in <main-worktree>/.tachograph.yaml.
+  # That file is additive to this list and is meant to be committed.
   on_create:
     - copy:
         path: .env
