@@ -169,7 +169,7 @@
         padding: 2px 0;
         list-style: none;
         color: var(--muted);
-        font-size: 11.5px;
+        font-size: 12px;
         font-weight: 550;
         cursor: pointer;
         user-select: none;

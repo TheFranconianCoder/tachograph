@@ -399,7 +399,7 @@ html[data-wco='1'] .connection {
 .section-head .count,
 .list-head .count {
     color: var(--faint);
-    font-size: 11.5px;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
 }
 
@@ -632,7 +632,7 @@ html[data-wco='1'] .connection {
 .count {
     flex: none;
     color: var(--faint);
-    font-size: 11.5px;
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
 }
 
@@ -866,7 +866,7 @@ details[open] > summary .panel-caret {
     min-width: 0;
     color: var(--ink-2);
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: 12px;
     text-align: right;
     overflow-wrap: anywhere;
 }
@@ -890,7 +890,7 @@ details[open] > summary .panel-caret {
 
 .root-list .row__title {
     font-family: var(--font-mono);
-    font-size: 11.5px;
+    font-size: 12px;
 }
 
 .root-form {
@@ -1126,7 +1126,7 @@ details[open] > summary .panel-caret {
     padding: 8px 12px;
     border-top: 1px solid var(--line);
     color: var(--ink-2);
-    font-size: 11.5px;
+    font-size: 12px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -1322,7 +1322,7 @@ details[open] > summary .panel-caret {
     border-radius: var(--radius-sm);
     background: var(--bg-muted);
     color: var(--muted);
-    font-size: 11.5px;
+    font-size: 12px;
 }
 
 .notice--error {

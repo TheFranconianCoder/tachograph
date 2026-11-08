@@ -48,7 +48,7 @@
         align-items: center;
         margin-top: 11px;
         color: var(--muted);
-        font-size: 11.5px;
+        font-size: 12px;
         cursor: pointer;
     }
 

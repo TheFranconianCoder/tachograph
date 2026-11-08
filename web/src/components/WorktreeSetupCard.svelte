@@ -228,7 +228,7 @@
 
     .setup-row .input {
         height: 30px;
-        font-size: 11.5px;
+        font-size: 12px;
     }
 
     .setup-empty {
@@ -248,7 +248,7 @@
         gap: 6px;
         align-items: center;
         color: var(--muted);
-        font-size: 11.5px;
+        font-size: 12px;
         cursor: pointer;
     }
 

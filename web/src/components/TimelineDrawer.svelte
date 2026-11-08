@@ -1093,7 +1093,7 @@
         border: 0;
         background: transparent;
         color: inherit;
-        font-size: 10.5px;
+        font-size: 12px;
         text-align: left;
         cursor: pointer;
     }
@@ -1148,7 +1148,7 @@
         border: 1px solid var(--line);
         border-radius: var(--radius-sm);
         background: var(--bg);
-        font-size: 10.5px;
+        font-size: 12px;
     }
 
     .diff-scope__label {
@@ -1169,7 +1169,7 @@
         background: var(--bg);
         color: var(--ink-2);
         font-family: var(--font-mono);
-        font-size: 10.5px;
+        font-size: 12px;
         line-height: 1.5;
     }
 
