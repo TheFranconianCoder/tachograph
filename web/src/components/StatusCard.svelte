@@ -15,9 +15,6 @@
         lastSnapshotAt: string;
         lastScanAt: string;
         now: number;
-        busy: boolean;
-        onToggleRecording: () => void;
-        onToggleAutostart: (enabled: boolean) => void;
     }
 
     const {
@@ -32,9 +29,6 @@
         lastSnapshotAt,
         lastScanAt,
         now,
-        busy,
-        onToggleRecording,
-        onToggleAutostart,
     }: Props = $props();
 
     const diffLabel = $derived(
@@ -160,27 +154,6 @@
                 </div>
             </div>
         </details>
-
-        <button
-            type="button"
-            class="btn btn--secondary status-action"
-            onclick={onToggleRecording}
-            disabled={busy || !status}
-        >
-            <Icon name={status?.paused ? 'play' : 'pause'} size={15} />
-            {status?.paused ? 'Resume recording' : 'Pause recording'}
-        </button>
-
-        <label class="autostart">
-            <input
-                type="checkbox"
-                checked={status?.autostart ?? false}
-                disabled={busy || !status}
-                onchange={event => onToggleAutostart(event.currentTarget.checked)}
-            />
-            <span>Start at login</span>
-            <span class="autostart-note">without opening the UI</span>
-        </label>
     </div>
 </section>
 
@@ -262,27 +235,6 @@
         font-size: 13px;
         font-weight: 650;
         font-variant-numeric: tabular-nums;
-    }
-
-    .autostart {
-        display: flex;
-        gap: 7px;
-        align-items: center;
-        margin-top: 11px;
-        color: var(--muted);
-        font-size: 11.5px;
-        cursor: pointer;
-    }
-
-    .autostart input {
-        width: 14px;
-        height: 14px;
-        accent-color: var(--accent);
-    }
-
-    .autostart-note {
-        color: var(--faint);
-        font-size: 10.5px;
     }
 
     .state-name {

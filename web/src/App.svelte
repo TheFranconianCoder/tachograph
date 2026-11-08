@@ -2,6 +2,7 @@
     import { onMount } from 'svelte';
     import ActivityTable from './components/ActivityTable.svelte';
     import ProjectPanel from './components/ProjectPanel.svelte';
+    import RecorderActionsCard from './components/RecorderActionsCard.svelte';
     import RootsCard from './components/RootsCard.svelte';
     import StatusCard from './components/StatusCard.svelte';
     import WorktreeSetupCard from './components/WorktreeSetupCard.svelte';
@@ -387,9 +388,6 @@
                     {lastSnapshotAt}
                     {lastScanAt}
                     {now}
-                    {busy}
-                    onToggleRecording={toggleRecording}
-                    onToggleAutostart={toggleAutostart}
                 />
                 <div class="column-stack">
                     <RootsCard
@@ -411,6 +409,12 @@
                         setup={status?.worktreeSetup ?? null}
                         onSave={saveWorktreeSetup}
                         onApply={applyWorktreeSetup}
+                    />
+                    <RecorderActionsCard
+                        {status}
+                        {busy}
+                        onToggleRecording={toggleRecording}
+                        onToggleAutostart={toggleAutostart}
                     />
                 </div>
             </section>

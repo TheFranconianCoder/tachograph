@@ -62,7 +62,8 @@ Verify the download with `sha256sum -c SHA256SUMS` on Linux or
 Gatekeeper may need an explicit allow in System Settings.
 
 The first start opens the UI; add a root such as `~/Code` and the worktrees
-below it are recorded. Start at login is available in the status card.
+below it are recorded. Start at login is available in the recording controls
+card.
 
 ## Build from source
 
@@ -98,10 +99,10 @@ manifest name, finds the browser-written launcher (`--app-id=…`) in the XDG ap
 and starts that. Without a launcher it falls back to the OS URL handler (`xdg-open`, `open` or
 `rundll32`).
 
-**Start at login** is available in the status card. Tachograph checks the entry on every start and
-refreshes it if the executable or arguments changed; disabling removes it. The login command is
-`tachograph app --no-open`, so autostart never opens the browser UI — the app stays in the tray.
-Failures are logged and never block the app.
+**Start at login** is available in the recording controls card. Tachograph checks the entry on
+every start and refreshes it if the executable or arguments changed; disabling removes it. The
+login command is `tachograph app --no-open`, so autostart never opens the browser UI — the app
+stays in the tray. Failures are logged and never block the app.
 
 ```text
 Linux    ~/.config/autostart/tachograph.desktop
