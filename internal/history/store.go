@@ -262,15 +262,6 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 	if strings.TrimSpace(numstat) == "" {
 		return Snapshot{}, ErrNoChanges
 	}
-	stats := parseNumstat(numstat)
-	// The first snapshot copies the whole source tree. Its diffstats describe
-	// the initialization, not a change, so leave them empty. An empty archive
-	// root is the same state after compaction.
-	if subject, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%s", "HEAD"); err == nil &&
-		(strings.HasPrefix(subject, "base:") ||
-			(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, "HEAD"))) {
-		stats = nil
-	}
 
 	// The project branch or HEAD may have moved since Ensure; the snapshot
 	// message should describe the state that was actually recorded.
@@ -293,7 +284,26 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("resolve snapshot hash: %w", err)
 	}
 
-	return Snapshot{Hash: hash, Message: message, CreatedAt: createdAt, Stats: stats}, nil
+	return Snapshot{Hash: hash, Message: message, CreatedAt: createdAt, Stats: r.cumulativeStats(ctx, hash)}, nil
+}
+
+// cumulativeStats returns the net line changes since the worktree was
+// initialized. The hidden source copy is the base, so the numbers cover every
+// snapshot visible in the timeline. Main worktrees deliberately stay without
+// stats.
+func (r *Recorder) cumulativeStats(ctx context.Context, hash string) *ChangeStats {
+	if r.isMainWorktree() {
+		return nil
+	}
+	base := r.timelineLowerBound(ctx)
+	if base == "" || base == hash {
+		return nil
+	}
+	output, err := runGit(ctx, r.Placeholder, "diff", "--numstat", base, hash)
+	if err != nil || strings.TrimSpace(output) == "" {
+		return nil
+	}
+	return parseNumstat(output)
 }
 
 // parseNumstat sums Git's --numstat output. Binary files report "-" for both

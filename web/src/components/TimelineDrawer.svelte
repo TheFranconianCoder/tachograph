@@ -14,10 +14,10 @@
         worktree: Worktree;
         selectedHash: string | null;
         selectedFrom: string | null;
-        selectedFile: string | null;
+        selectedFiles: string[];
         onSelect: (hash: string | null) => void;
         onSelectRange: (from: string, to: string) => void;
-        onSelectFile: (file: string | null) => void;
+        onSelectFiles: (files: string[]) => void;
         onClose: () => void;
     }
 
@@ -25,10 +25,10 @@
         worktree,
         selectedHash,
         selectedFrom,
-        selectedFile,
+        selectedFiles,
         onSelect,
         onSelectRange,
-        onSelectFile,
+        onSelectFiles,
         onClose,
     }: Props = $props();
 
@@ -58,6 +58,8 @@
     let lastSnapshots = $state<number | null>(null);
     let lastDetailKey = '';
     let anchorHash = $state<string | null>(null);
+    let anchorPath = $state<string | null>(null);
+    const selectedSet = $derived(new Set(selectedFiles));
 
     interface DiffRow {
         kind: '' | 'add' | 'del' | 'hunk';
@@ -122,11 +124,18 @@
 
         const range = detail.kind === 'range';
         const count = detail.count && detail.count > 1 ? `${detail.count} snapshots` : 'this range';
+        const files = selectedFiles;
+        const scope = range ? count : 'this snapshot';
+        const subject = files.length
+            ? `${files.length} selected file${files.length === 1 ? '' : 's'} from ${scope}`
+            : `all changed files in ${scope}`;
         const confirmed = await confirm({
-            title: range ? 'Revert snapshot range' : 'Revert snapshot',
-            message: range
-                ? `Revert the changes of ${count}? Files added in the range are deleted; changed files are restored to their state before the range. The next snapshot records the revert.`
-                : 'Revert this snapshot? Files it added are deleted; changed files are restored to their previous state. The next snapshot records the revert.',
+            title: files.length
+                ? 'Revert selected files'
+                : range
+                  ? 'Revert snapshot range'
+                  : 'Revert snapshot',
+            message: `Revert ${subject}? Files added in the selection are deleted; changed files are restored to their previous state. The next snapshot records the revert.`,
             confirmLabel: 'Revert',
             cancelLabel: 'Cancel',
             danger: true,
@@ -137,7 +146,7 @@
         revertError = null;
         revertMessage = null;
         try {
-            const result = await revertSnapshots(worktreePath, from, to);
+            const result = await revertSnapshots(worktreePath, from, to, files);
             const parts = [`${result.restored.length} restored`, `${result.deleted.length} deleted`];
             if (result.unchanged.length) parts.push(`${result.unchanged.length} unchanged`);
             if (result.skipped.length) parts.push(`${result.skipped.length} skipped`);
@@ -172,6 +181,40 @@
         const older = entries[Math.max(anchorIndex, targetIndex)].hash;
         const newer = entries[Math.min(anchorIndex, targetIndex)].hash;
         onSelectRange(older, newer);
+    }
+
+    function selectFile(path: string, event: MouseEvent): void {
+        const paths = detail?.files.map(file => file.path) ?? [];
+        const index = paths.indexOf(path);
+        if (index < 0) return;
+
+        const selected = new Set(selectedFiles);
+        if (event.shiftKey) {
+            const anchorIndex = anchorPath ? paths.indexOf(anchorPath) : -1;
+            if (anchorIndex >= 0) {
+                const start = Math.min(anchorIndex, index);
+                const end = Math.max(anchorIndex, index);
+                if (!(event.ctrlKey || event.metaKey)) selected.clear();
+                for (const item of paths.slice(start, end + 1)) selected.add(item);
+            } else {
+                selected.clear();
+                selected.add(path);
+                anchorPath = path;
+            }
+        } else if (event.ctrlKey || event.metaKey) {
+            if (selected.has(path)) selected.delete(path);
+            else selected.add(path);
+            anchorPath = path;
+        } else {
+            if (selected.size === 1 && selected.has(path)) {
+                selected.clear();
+            } else {
+                selected.clear();
+                selected.add(path);
+            }
+            anchorPath = path;
+        }
+        onSelectFiles(paths.filter(item => selected.has(item)));
     }
 
     function applyFilter(event: SubmitEvent): void {
@@ -292,12 +335,13 @@
     $effect(() => {
         const hash = selectedHash;
         const from = selectedFrom;
-        const file = selectedFile;
+        const files = selectedFiles;
         const appearance = resolvedTheme();
         const key = `${from ?? ''}|${hash ?? ''}`;
         if (key !== lastDetailKey) {
             revertMessage = null;
             revertError = null;
+            anchorPath = null;
             labelEditing = false;
             labelDraft = '';
             labelSaving = false;
@@ -316,8 +360,8 @@
         void (async () => {
             try {
                 const result = from
-                    ? await fetchRange(worktreePath, from, hash, file ?? '', appearance)
-                    : await fetchSnapshot(worktreePath, hash, file ?? '', appearance);
+                    ? await fetchRange(worktreePath, from, hash, files, appearance)
+                    : await fetchSnapshot(worktreePath, hash, files, appearance);
                 if (!cancelled) detail = result;
             } catch (cause) {
                 if (!cancelled) {
@@ -556,19 +600,19 @@
                 </header>
 
                 {#if detail.files.length > 0}
+                    {#if detail.files.length > 1}
+                        <p class="file-hint">Shift-, Ctrl- or Cmd-click for multiple files</p>
+                    {/if}
                     <div class="detail-files">
                         {#each detail.files as file (file.path)}
-                            <div class="detail-file" class:active={selectedFile === file.path}>
+                            <div class="detail-file" class:active={selectedSet.has(file.path)}>
                                 <button
                                     type="button"
                                     class="detail-file__main"
-                                    title={selectedFile === file.path
-                                        ? selectedFrom
-                                            ? 'Show the full range diff'
-                                            : 'Show the full snapshot diff'
-                                        : 'Show only this file'}
-                                    onclick={() =>
-                                        onSelectFile(selectedFile === file.path ? null : file.path)}
+                                    title={selectedSet.has(file.path)
+                                        ? 'Remove from selection'
+                                        : 'Select file (Shift, Ctrl or Cmd for multiple)'}
+                                    onclick={event => selectFile(file.path, event)}
                                 >
                                     <span class={`file-status file-status--${file.status}`}>
                                         {file.status}
@@ -593,16 +637,21 @@
                     <p class="notice notice--error revert-notice">{revertError}</p>
                 {/if}
 
-                {#if selectedFile}
+                {#if selectedFiles.length > 0}
                     <div class="diff-scope">
                         <span class="faint">Diff</span>
-                        <span class="diff-scope__label mono truncate" title={selectedFile}>
-                            {selectedFile}
+                        <span
+                            class="diff-scope__label mono truncate"
+                            title={selectedFiles.join('\n')}
+                        >
+                            {selectedFiles.length === 1
+                                ? selectedFiles[0]
+                                : `${selectedFiles.length} files selected`}
                         </span>
                         <button
                             type="button"
                             class="btn btn--ghost btn--sm"
-                            onclick={() => onSelectFile(null)}
+                            onclick={() => onSelectFiles([])}
                         >
                             All files
                         </button>
@@ -617,8 +666,8 @@
                     {#if diffTruncated}
                         <p class="muted diff-note">Diff truncated.</p>
                     {/if}
-                {:else if selectedFile}
-                    <p class="muted diff-note">No textual diff for this file.</p>
+                {:else if selectedFiles.length > 0}
+                    <p class="muted diff-note">No textual diff for the selected files.</p>
                 {/if}
             {:else}
                 <p class="muted">Select a snapshot to see its files and diff.</p>
@@ -913,6 +962,12 @@
     .label-error {
         width: 100%;
         margin: 2px 0 0;
+    }
+
+    .file-hint {
+        margin: 12px 0 0;
+        color: var(--faint);
+        font-size: 9.5px;
     }
 
     .detail-files {

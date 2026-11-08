@@ -468,6 +468,34 @@ func TestSlugOr(t *testing.T) {
 	}
 }
 
+func TestSnapshotStatsAreCumulative(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "a.txt"), "one\n")
+	writeFile(t, filepath.Join(worktree, "b.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+
+	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("first snapshot: %v", err)
+	}
+
+	writeFile(t, filepath.Join(worktree, "b.txt"), "one\ntwo\nthree\n")
+	snapshot, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("second snapshot: %v", err)
+	}
+	if snapshot.Stats == nil {
+		t.Fatal("cumulative stats missing")
+	}
+	if snapshot.Stats.Files != 2 || snapshot.Stats.Added != 3 || snapshot.Stats.Deleted != 1 {
+		t.Errorf("cumulative stats = %+v, want 2 files, +3 -1", snapshot.Stats)
+	}
+}
+
 func mustGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := runGit(context.Background(), dir, args...)

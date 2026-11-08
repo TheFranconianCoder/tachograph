@@ -156,12 +156,12 @@
 
     function selectRange(from: string, to: string): void {
         if (route.name !== 'timeline') return;
-        navigate(timelineURL(route.worktreeID, to, null, from));
+        navigate(timelineURL(route.worktreeID, to, [], from));
     }
 
-    function selectFile(file: string | null): void {
+    function selectFiles(files: string[]): void {
         if (route.name !== 'timeline' || !route.hash) return;
-        navigate(timelineURL(route.worktreeID, route.hash, file, route.from));
+        navigate(timelineURL(route.worktreeID, route.hash, files, route.from));
     }
 
     function closeTimeline(): void {
@@ -539,10 +539,10 @@
                 worktree={timelineWorktree}
                 selectedHash={route.name === 'timeline' ? route.hash : null}
                 selectedFrom={route.name === 'timeline' ? route.from : null}
-                selectedFile={route.name === 'timeline' ? route.file : null}
+                selectedFiles={route.name === 'timeline' ? route.files : []}
                 onSelect={selectSnapshot}
                 onSelectRange={selectRange}
-                onSelectFile={selectFile}
+                onSelectFiles={selectFiles}
                 onClose={closeTimeline}
             />
         {/key}

@@ -63,11 +63,11 @@ export async function fetchRange(
     path: string,
     from: string,
     to: string,
-    file = '',
+    files: string[] = [],
     theme = 'dark'
 ): Promise<SnapshotDetail> {
     const params = new URLSearchParams({ path, from, to, theme });
-    if (file) params.set('file', file);
+    for (const file of files) params.append('file', file);
     const response = await fetch(`/api/v1/range?${params}`, {
         headers: { accept: 'application/json' },
     });
@@ -78,11 +78,11 @@ export async function fetchRange(
 export async function fetchSnapshot(
     path: string,
     hash: string,
-    file = '',
+    files: string[] = [],
     theme = 'dark'
 ): Promise<SnapshotDetail> {
     const params = new URLSearchParams({ path, hash, theme });
-    if (file) params.set('file', file);
+    for (const file of files) params.append('file', file);
     const response = await fetch(`/api/v1/snapshot?${params}`, {
         headers: { accept: 'application/json' },
     });
@@ -100,12 +100,13 @@ export interface RevertResult {
 export async function revertSnapshots(
     path: string,
     from: string,
-    to: string
+    to: string,
+    files: string[] = []
 ): Promise<RevertResult> {
     const response = await fetch('/api/v1/revert', {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ path, from, to }),
+        body: JSON.stringify({ path, from, to, files }),
     });
     if (!response.ok) throw new Error(await errorMessage(response));
     return (await response.json()) as RevertResult;

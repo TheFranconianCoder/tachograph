@@ -44,12 +44,13 @@ type restoreOutcome struct {
 // base is the parent of from, so the first visible snapshot can be reverted
 // even when its parent is the hidden initialization copy. Only files changed
 // in that range are touched.
-func (r *Recorder) Revert(ctx context.Context, from, to string) (RevertResult, error) {
+func (r *Recorder) Revert(ctx context.Context, from, to string, selected ...string) (RevertResult, error) {
 	if r.lock != nil {
 		r.lock.Lock()
 		defer r.lock.Unlock()
 	}
 
+	selected = cleanFileSelection(selected)
 	from = strings.TrimSpace(from)
 	to = strings.TrimSpace(to)
 	if !commitHashPattern.MatchString(from) || !commitHashPattern.MatchString(to) {
@@ -99,7 +100,16 @@ func (r *Recorder) Revert(ctx context.Context, from, to string) (RevertResult, e
 		Unchanged: []string{},
 		Skipped:   []string{},
 	}
+	wanted := make(map[string]bool, len(selected))
+	for _, path := range selected {
+		wanted[path] = true
+	}
+	seen := make(map[string]bool, len(selected))
 	for _, file := range files {
+		if len(wanted) > 0 && !wanted[file.Path] {
+			continue
+		}
+		seen[file.Path] = true
 		switch file.Status {
 		case "A", "C":
 			changed, err := deleteRestoredPath(root, file.Path)
@@ -136,6 +146,11 @@ func (r *Recorder) Revert(ctx context.Context, from, to string) (RevertResult, e
 			} else {
 				mergeRestoreOutcome(&result, outcome)
 			}
+		}
+	}
+	for _, path := range selected {
+		if !seen[path] {
+			result.Skipped = append(result.Skipped, path)
 		}
 	}
 	return result, nil

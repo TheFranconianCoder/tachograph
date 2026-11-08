@@ -184,34 +184,38 @@ func (r *Recorder) firstCommitAfter(ctx context.Context, hash string) string {
 	return first
 }
 
-// SnapshotDetail returns the file list and patch for one commit. When file is
-// set, the file list stays complete but the patch is limited to that path.
-func (r *Recorder) SnapshotDetail(ctx context.Context, hash, file string) (SnapshotDetail, error) {
+// SnapshotDetail returns the file list and patch for one commit. When files are
+// set, the file list stays complete but the patch is limited to those paths.
+func (r *Recorder) SnapshotDetail(ctx context.Context, hash string, files ...string) (SnapshotDetail, error) {
 	hash = strings.TrimSpace(hash)
 	if !commitHashPattern.MatchString(hash) {
 		return SnapshotDetail{}, fmt.Errorf("invalid commit hash")
 	}
-	file = strings.TrimSpace(file)
+	selected := cleanFileSelection(files)
 
 	detail, err := r.commitDetail(ctx, hash)
 	if err != nil {
 		return SnapshotDetail{}, err
 	}
-	detail.File = file
+	if len(selected) > 0 {
+		detail.File = selected[0]
+	}
 
 	// Base and archive roots are states, not changes: they have no files or
 	// patch of their own.
 	if detail.Kind == "snapshot" && detail.Parent != "" {
-		files, truncated, err := r.changedFiles(ctx, detail.Parent, detail.Hash)
+		changed, truncated, err := r.changedFiles(ctx, detail.Parent, detail.Hash)
 		if err != nil {
 			return SnapshotDetail{}, err
 		}
-		detail.Files = files
+		detail.Files = changed
 		detail.Truncated = truncated
-		if file != "" && !hasSnapshotFile(detail.Files, file) {
-			return SnapshotDetail{}, fmt.Errorf("%w: %s", ErrFileNotInSnapshot, file)
+		for _, file := range selected {
+			if !hasSnapshotFile(detail.Files, file) {
+				return SnapshotDetail{}, fmt.Errorf("%w: %s", ErrFileNotInSnapshot, file)
+			}
 		}
-		detail.Diff, detail.DiffTool, err = r.diffBetween(ctx, detail.Parent, detail.Hash, file)
+		detail.Diff, detail.DiffTool, err = r.diffBetween(ctx, detail.Parent, detail.Hash, selected)
 		if err != nil {
 			return SnapshotDetail{}, err
 		}
@@ -224,13 +228,13 @@ func (r *Recorder) SnapshotDetail(ctx context.Context, hash, file string) (Snaps
 // is the oldest and to the newest selection; the patch starts at the parent of
 // from so the oldest selected change is included. When from is a root (base or
 // archive) its tree is the starting point.
-func (r *Recorder) RangeDetail(ctx context.Context, from, to, file string) (SnapshotDetail, error) {
+func (r *Recorder) RangeDetail(ctx context.Context, from, to string, files ...string) (SnapshotDetail, error) {
 	from = strings.TrimSpace(from)
 	to = strings.TrimSpace(to)
 	if !commitHashPattern.MatchString(from) || !commitHashPattern.MatchString(to) {
 		return SnapshotDetail{}, fmt.Errorf("invalid commit hash")
 	}
-	file = strings.TrimSpace(file)
+	selected := cleanFileSelection(files)
 
 	fromHash, err := r.resolveCommit(ctx, from)
 	if err != nil {
@@ -259,20 +263,24 @@ func (r *Recorder) RangeDetail(ctx context.Context, from, to, file string) (Snap
 	}
 	detail.Kind = "range"
 	detail.From = fromHash
-	detail.File = file
+	if len(selected) > 0 {
+		detail.File = selected[0]
+	}
 	// A range is not a single snapshot; labelling it would be ambiguous.
 	detail.Label = ""
 
-	files, truncated, err := r.changedFiles(ctx, start, toHash)
+	changed, truncated, err := r.changedFiles(ctx, start, toHash)
 	if err != nil {
 		return SnapshotDetail{}, err
 	}
-	detail.Files = files
+	detail.Files = changed
 	detail.Truncated = truncated
-	if file != "" && !hasSnapshotFile(detail.Files, file) {
-		return SnapshotDetail{}, fmt.Errorf("%w: %s", ErrFileNotInSnapshot, file)
+	for _, file := range selected {
+		if !hasSnapshotFile(detail.Files, file) {
+			return SnapshotDetail{}, fmt.Errorf("%w: %s", ErrFileNotInSnapshot, file)
+		}
 	}
-	detail.Diff, detail.DiffTool, err = r.diffBetween(ctx, start, toHash, file)
+	detail.Diff, detail.DiffTool, err = r.diffBetween(ctx, start, toHash, selected)
 	if err != nil {
 		return SnapshotDetail{}, err
 	}
@@ -376,10 +384,13 @@ func boundDiff(diff string, truncated bool) (string, bool) {
 // diffBetween renders the patch between two commits. Delta or difftastic is
 // used when it was resolved and produces output; Git's unified diff is the
 // fallback.
-func (r *Recorder) diffBetween(ctx context.Context, from, to, file string) (string, string, error) {
+func (r *Recorder) diffBetween(ctx context.Context, from, to string, files []string) (string, string, error) {
 	pathspec := []string{}
-	if file != "" {
-		pathspec = []string{"--", literalPathspec(file)}
+	if len(files) > 0 {
+		pathspec = append(pathspec, "--")
+		for _, file := range files {
+			pathspec = append(pathspec, literalPathspec(file))
+		}
 	}
 	theme := diffTheme(ctx)
 
@@ -450,6 +461,21 @@ func hasSnapshotFile(files []SnapshotFile, path string) bool {
 		}
 	}
 	return false
+}
+
+// cleanFileSelection trims, deduplicates and drops empty pathspecs.
+func cleanFileSelection(files []string) []string {
+	seen := make(map[string]bool, len(files))
+	selected := make([]string, 0, len(files))
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		if file == "" || seen[file] {
+			continue
+		}
+		seen[file] = true
+		selected = append(selected, file)
+	}
+	return selected
 }
 
 // classifySubject turns a history commit subject into its kind and, for

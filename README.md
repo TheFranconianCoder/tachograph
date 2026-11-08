@@ -189,9 +189,10 @@ The status card shows `Recording: on`, the trigger engine (`watchexec` or `poll`
 summarizes the recorder state of all worktrees: **watching**, **polling** and **idle**. Every worktree row shows its state (`watching`, `polling`, `idle`,
 `paused`, `error`), `N snap` / `N snaps`, the snapshot age and the current poll interval on hover. The
 Activity list keeps one entry per worktree: a new snapshot or error replaces the previous entry for
-that worktree. The newest entry per worktree is persisted in the same
-`$XDG_STATE_HOME/tachograph/activity.json` and restored on startup, so the table is not empty after a
-restart.
+that worktree. Linked worktrees show the cumulative added and deleted lines since initialization;
+the main worktree deliberately stays without diffstats. The newest entry per worktree is persisted
+in the same `$XDG_STATE_HOME/tachograph/activity.json` and restored on startup, so the table is not
+empty after a restart.
 
 The UI is live: it opens one SSE connection to `GET /api/v1/events`, receives a full status snapshot
 on connect and after every change, and shows the connection state in the topbar and the status card.
@@ -262,8 +263,9 @@ Every view has an addressable URL:
 The worktree ID is the stable 12-character ID from the status API. Selecting a snapshot pushes a
 history entry, so browser back/forward walks the timeline, and a deep link survives a reload (the
 server falls back to the single-page app for unknown paths). Clicking a changed file narrows the
-diff to that file; the complete file list stays visible and "All files" shows the full patch.
-**Shift-click** a second snapshot to compare the contiguous range: the patch spans from the parent
+diff to that file. **Shift-, Ctrl- or Cmd-click** selects multiple files; both the diff and the
+revert then apply to the selection. The complete file list stays visible and "All files" shows the
+full patch. **Shift-click** a second snapshot to compare the contiguous range: the patch spans from the parent
 of the older selection to the newer one, so the oldest selected change is included. The range bar
 shows the count and both endpoints; "Single snapshot" collapses it again. If a link points at a
 worktree that no longer exists, the UI says so instead of failing silently.
@@ -273,11 +275,12 @@ label chip) in the detail head and save. Labels appear as a chip and in the row 
 kept in `labels.json` inside the project store. Compaction remaps labels onto rewritten commits and
 drops the labels of snapshots that no longer exist.
 
-Select one snapshot or a range and press **Revert** in the detail pane. The reverse of the selected
-change is written into the worktree: changed and deleted files are restored from the parent of the
-oldest selected snapshot, and files added in the selection are removed. Files outside the selection
-are kept, submodules are skipped, and the next snapshot records the revert. The diff is capped at
-500 files and 256 KiB.
+Select one snapshot or a range and press **Revert** in the detail pane. With a file selection, only
+those files are reverted; without one, all files changed in the snapshot or range are reverted. The
+reverse of the selected change is written into the worktree: changed and deleted files are restored
+from the parent of the oldest selected snapshot, and files added in the selection are removed. Files
+outside the selection are kept, submodules are skipped, and the next snapshot records the revert.
+The diff is capped at 500 files and 256 KiB.
 
 Projects are listed in one column, newest change first. The filter above the list narrows by project
 name, path, branch or state. Inside a project the **project header is the main worktree**: it carries

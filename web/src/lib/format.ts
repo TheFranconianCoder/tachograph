@@ -11,7 +11,7 @@ export const formatCount = (value: number): string => value.toLocaleString();
 
 /** Human-readable form of the same counts for tooltips. */
 export const changeTitle = (stats: ChangeStats): string =>
-    `${formatCount(stats.files)} ${stats.files === 1 ? 'file' : 'files'} changed, ` +
+    `${formatCount(stats.files)} ${stats.files === 1 ? 'file' : 'files'} changed since initialization, ` +
     `+${formatCount(stats.added)} -${formatCount(stats.deleted)}`;
 
 export const absoluteTime = (value?: string): string =>

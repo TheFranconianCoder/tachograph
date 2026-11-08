@@ -127,6 +127,47 @@ func TestRevertRange(t *testing.T) {
 	}
 }
 
+func TestRevertSelectedFiles(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "a.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
+	writeFile(t, filepath.Join(worktree, "b.txt"), "new\n")
+	snapshot, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	result, err := recorder.Revert(ctx, snapshot.Hash, snapshot.Hash, "a.txt")
+	if err != nil {
+		t.Fatalf("Revert selected: %v", err)
+	}
+	if !hasPath(result.Restored, "a.txt") {
+		t.Errorf("restored = %v, want a.txt", result.Restored)
+	}
+	if hasPath(result.Deleted, "b.txt") {
+		t.Errorf("deleted = %v, want b.txt untouched", result.Deleted)
+	}
+	if content := readFile(t, filepath.Join(worktree, "a.txt")); content != "one\n" {
+		t.Errorf("a.txt = %q, want the previous version", content)
+	}
+	if content := readFile(t, filepath.Join(worktree, "b.txt")); content != "new\n" {
+		t.Errorf("b.txt = %q, want it untouched", content)
+	}
+
+	stale, err := recorder.Revert(ctx, snapshot.Hash, snapshot.Hash, "missing.txt")
+	if err != nil {
+		t.Fatalf("Revert stale selection: %v", err)
+	}
+	if !hasPath(stale.Skipped, "missing.txt") {
+		t.Errorf("skipped = %v, want missing.txt", stale.Skipped)
+	}
+}
+
 func TestRevertRename(t *testing.T) {
 	recorder, worktree := newRevertRecorder(t)
 	ctx := t.Context()

@@ -279,14 +279,10 @@ func (a *App) handleRange(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "path, from and to are required")
 		return
 	}
-	file := strings.TrimSpace(r.URL.Query().Get("file"))
-	if file != "" {
-		cleaned, ok := worktreeRelativePath(file)
-		if !ok {
-			writeError(w, http.StatusBadRequest, "file must be a relative path inside the worktree")
-			return
-		}
-		file = cleaned
+	files, err := queryFiles(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	recorder, err := a.recorderForPath(r.Context(), path)
@@ -295,7 +291,7 @@ func (a *App) handleRange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := history.WithDiffTheme(r.Context(), r.URL.Query().Get("theme"))
-	detail, err := recorder.RangeDetail(ctx, from, to, file)
+	detail, err := recorder.RangeDetail(ctx, from, to, files...)
 	if errors.Is(err, history.ErrSnapshotNotFound) {
 		writeError(w, http.StatusNotFound, "snapshot not found; it may have been compacted away")
 		return
@@ -345,9 +341,10 @@ func (a *App) handleSetLabel(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleRevert(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Path string `json:"path"`
-		From string `json:"from"`
-		To   string `json:"to"`
+		Path  string   `json:"path"`
+		From  string   `json:"from"`
+		To    string   `json:"to"`
+		Files []string `json:"files"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -358,13 +355,18 @@ func (a *App) handleRevert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "path, from and to are required")
 		return
 	}
+	files, err := cleanRequestFiles(request.Files)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	recorder, err := a.recorderForPath(r.Context(), request.Path)
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	result, err := recorder.Revert(r.Context(), request.From, request.To)
+	result, err := recorder.Revert(r.Context(), request.From, request.To, files...)
 	if errors.Is(err, history.ErrSnapshotNotFound) {
 		writeError(w, http.StatusNotFound, "snapshot not found; it may have been compacted away")
 		return
@@ -383,14 +385,10 @@ func (a *App) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "path and hash are required")
 		return
 	}
-	file := strings.TrimSpace(r.URL.Query().Get("file"))
-	if file != "" {
-		cleaned, ok := worktreeRelativePath(file)
-		if !ok {
-			writeError(w, http.StatusBadRequest, "file must be a relative path inside the worktree")
-			return
-		}
-		file = cleaned
+	files, err := queryFiles(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	recorder, err := a.recorderForPath(r.Context(), path)
@@ -399,7 +397,7 @@ func (a *App) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := history.WithDiffTheme(r.Context(), r.URL.Query().Get("theme"))
-	detail, err := recorder.SnapshotDetail(ctx, hash, file)
+	detail, err := recorder.SnapshotDetail(ctx, hash, files...)
 	if errors.Is(err, history.ErrSnapshotNotFound) {
 		writeError(w, http.StatusNotFound, "snapshot not found; it may have been compacted away")
 		return
@@ -451,6 +449,26 @@ func worktreeRelativePath(value string) (string, bool) {
 		return "", false
 	}
 	return filepath.ToSlash(cleaned), true
+}
+
+func queryFiles(r *http.Request) ([]string, error) {
+	return cleanRequestFiles(r.URL.Query()["file"])
+}
+
+func cleanRequestFiles(values []string) ([]string, error) {
+	files := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		cleaned, ok := worktreeRelativePath(value)
+		if !ok {
+			return nil, fmt.Errorf("file must be a relative path inside the worktree")
+		}
+		files = append(files, cleaned)
+	}
+	return files, nil
 }
 
 func absoluteDirectory(path string) (string, error) {

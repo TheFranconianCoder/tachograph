@@ -18,7 +18,7 @@ const (
 	hibernateTickInterval = 15 * time.Second
 	activityMaxAge        = 30 * 24 * time.Hour
 	maxActivity           = 50
-	activityStateVersion  = 3
+	activityStateVersion  = 4
 )
 
 // Activity is one recent recorder event shown in the UI.
@@ -440,8 +440,8 @@ func loadActivityState(log *slog.Logger) (map[string]time.Time, []Activity) {
 	}
 
 	if stored.Version < activityStateVersion {
-		// Version 3 stopped recording diffstats for the initial source copy.
-		// Drop cached stats so old entries cannot show misleading numbers.
+		// Version 4 switched to cumulative diffstats. Drop cached
+		// per-snapshot values so old entries cannot show misleading numbers.
 		for i := range stored.Activity {
 			stored.Activity[i].Stats = nil
 		}

@@ -225,6 +225,42 @@ func TestTimelineShowsCompleteMainWorktreeHistory(t *testing.T) {
 	}
 }
 
+func TestSnapshotDetailMultipleFiles(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	writeFile(t, filepath.Join(worktree, "a.txt"), "one\n")
+	writeFile(t, filepath.Join(worktree, "b.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
+	writeFile(t, filepath.Join(worktree, "b.txt"), "two\n")
+	snapshot, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	detail, err := recorder.SnapshotDetail(ctx, snapshot.Hash, "a.txt", "b.txt")
+	if err != nil {
+		t.Fatalf("SnapshotDetail: %v", err)
+	}
+	if !strings.Contains(detail.Diff, "a.txt") || !strings.Contains(detail.Diff, "b.txt") {
+		t.Errorf("diff = %q, want both files", detail.Diff)
+	}
+	if detail.File != "a.txt" {
+		t.Errorf("File = %q, want a.txt", detail.File)
+	}
+
+	scoped, err := recorder.SnapshotDetail(ctx, snapshot.Hash, "a.txt")
+	if err != nil {
+		t.Fatalf("SnapshotDetail(a.txt): %v", err)
+	}
+	if !strings.Contains(scoped.Diff, "a.txt") || strings.Contains(scoped.Diff, "b.txt") {
+		t.Errorf("scoped diff = %q, want only a.txt", scoped.Diff)
+	}
+}
+
 func TestTimelineHidesArchiveAndInitialCopy(t *testing.T) {
 	ctx := t.Context()
 	base := t.TempDir()
