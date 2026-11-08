@@ -416,6 +416,12 @@ detection and project-repository isolation.
   builds Linux, macOS and Windows binaries with the version stamped in, writes `SHA256SUMS`, and
   publishes with `gh release create`. There are no GitHub workflows; notes are drafted in
   `.release/` and removed after a successful publish.
+- Worktree shell (done): `tachograph shell [WORKTREE]` must be run from the root worktree, offers
+  the linked worktrees of that project and opens a subshell in the chosen one. From a linked
+  worktree it exits with the root path. Without an argument, or when a query is ambiguous, a small
+  `bubbles/list` picker selects one. The shell exports `TACHOGRAPH_*` markers and prints a boxed
+  context block before it starts; Unix replaces the CLI process with `$SHELL`, Windows runs it as a
+  child and forwards the exit code.
 - Onboarding, native installers.
 - Optional, explicit remote backup of the history store.
 

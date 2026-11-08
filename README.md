@@ -110,6 +110,28 @@ macOS    ~/Library/LaunchAgents/dev.tachograph.tray.plist
 Windows  HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Tachograph
 ```
 
+### Worktree shell
+
+`tachograph shell` opens a subshell in a linked worktree of the current project. Run it from the
+**root (main) worktree**: it offers only that project's child worktrees. Started from a linked
+worktree it exits with the root path, and outside a managed directory it exits with an error
+instead of showing a picker. Without an argument it shows a small picker; with one it matches a
+path (including a subdirectory of a worktree), `project/worktree`, a directory name or a branch.
+Ambiguous queries open the picker with the query as the filter.
+
+```bash
+tachograph shell
+tachograph shell thought-keeper--feature-x
+tachograph shell feature/login
+```
+
+The shell starts in the worktree and exports `TACHOGRAPH_PROJECT`, `TACHOGRAPH_WORKTREE`,
+`TACHOGRAPH_WORKTREE_ID`, `TACHOGRAPH_BRANCH`, `TACHOGRAPH_MAIN_WORKTREE` and
+`TACHOGRAPH_HISTORY_REPO`. It uses `$SHELL` (`%COMSPEC%` on Windows) and requires the running app.
+Before the shell starts it prints a boxed context block (project, worktree, branch and path) to
+stderr, with color when the terminal supports it. The parent shell's directory is unchanged; `exit`
+returns to it.
+
 ### Discovery and roots
 
 Tachograph starts from the existing history stores, so previously recorded projects appear
