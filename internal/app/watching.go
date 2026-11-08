@@ -143,6 +143,8 @@ func (a *App) forgetWorktree(path string) {
 	delete(a.activity, path)
 	a.activityMu.Unlock()
 
+	a.dirty.forget(path)
+
 	a.watchMu.Lock()
 	delete(a.lastActive, path)
 	a.stateDirty = true

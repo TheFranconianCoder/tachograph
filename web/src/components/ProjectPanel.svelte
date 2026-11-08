@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from './ui/Icon.svelte';
     import Lamp from './ui/Lamp.svelte';
+    import DirtyMarker from './ui/DirtyMarker.svelte';
     import WorktreeRow from './WorktreeRow.svelte';
     import { lifecycleTitle, progressTitle, relativeTime, watcherTitle } from '../lib/format';
     import type { Project, Worktree } from '../lib/types';
@@ -41,6 +42,7 @@
 
 <section class="panel project-panel">
     <div class="panel-head project-head" class:project-head--only={linked.length === 0}>
+        <DirtyMarker dirty={main?.dirty ?? false} />
         <div class="worktree-row__main">
             <h2
                 class="truncate"

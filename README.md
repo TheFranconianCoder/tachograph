@@ -246,6 +246,11 @@ the main worktree deliberately stays without diffstats. The newest entry per wor
 in the same `$XDG_STATE_HOME/tachograph/activity.json` and restored on startup, so the table is not
 empty after a restart.
 
+A small dot at the left edge of the project header and of every worktree row marks a **dirty** source
+worktree: `git status` reports uncommitted or untracked, non-ignored changes against `HEAD`. The
+marker describes the real checkout, not the snapshot store; it refreshes every few seconds while the
+UI is connected.
+
 The UI is live: it opens one SSE connection to `GET /api/v1/events`, receives a full status snapshot
 on connect and after every change, and shows the connection state in the topbar and the status card.
 Only one UI window is active. A second window announces itself over a `BroadcastChannel`, focuses the
@@ -346,7 +351,8 @@ The diff is capped at 500 files and 256 KiB.
 Projects are listed in one column, newest change first. The filter above the list narrows by project
 name, path, branch or state. Inside a project the **project header is the main worktree**: it carries
 the main branch, snapshot age, timeline button and recorder state. Only the linked worktrees follow
-as rows, alphabetically by directory name. The dot at the end of every worktree row is the lifecycle
+as rows, alphabetically by directory name. The dot at the left edge marks a dirty source worktree
+(uncommitted changes against `HEAD`). The dot at the end of every worktree row is the lifecycle
 signal: green = setup actions applied, red = setup failed, hollow = no lifecycle actions recorded
 (hover shows the details).
 

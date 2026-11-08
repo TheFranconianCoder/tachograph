@@ -965,7 +965,7 @@ details[open] > summary .panel-caret {
 
 .worktree-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
     gap: 10px;
     align-items: center;
     padding: 8px 15px;
@@ -1073,7 +1073,7 @@ details[open] > summary .panel-caret {
 
 @media (max-width: 700px) {
     .worktree-row {
-        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
         padding: 8px 12px;
     }
 

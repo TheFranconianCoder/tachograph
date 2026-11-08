@@ -14,6 +14,7 @@ export interface Worktree {
     snapshots?: number;
     intervalMs?: number;
     watcherError?: string;
+    dirty?: boolean;
     stats?: ChangeStats;
 }
 

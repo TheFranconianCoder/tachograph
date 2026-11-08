@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from './ui/Icon.svelte';
     import Lamp from './ui/Lamp.svelte';
+    import DirtyMarker from './ui/DirtyMarker.svelte';
     import {
         baseName,
         changeTitle,
@@ -34,6 +35,7 @@
 </script>
 
 <li class="worktree-row">
+    <DirtyMarker dirty={worktree.dirty ?? false} />
     <div class="worktree-row__main">
         <span class="worktree-row__name truncate" title={worktree.path}>
             {baseName(worktree.path)}

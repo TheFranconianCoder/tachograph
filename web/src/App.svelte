@@ -192,6 +192,7 @@
                     worktree.state,
                     worktree.watcher ?? '',
                     worktree.setup ?? '',
+                    worktree.dirty ? 'dirty' : '',
                 ]),
             ]
                 .join(' ')

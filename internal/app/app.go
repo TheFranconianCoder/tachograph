@@ -67,6 +67,8 @@ type App struct {
 	activityMu sync.Mutex
 	activity   map[string]Activity
 
+	dirty *dirtyState
+
 	watchMu        sync.Mutex
 	watchGroups    map[string]*watchGroup
 	lastActive     map[string]time.Time
@@ -117,6 +119,7 @@ func New(cfg Config, cfgPath string, opts Options, log *slog.Logger) (*App, erro
 		projects:     []ProjectStatus{},
 		quit:         make(chan struct{}),
 		activity:     activityMap(persistedActivity),
+		dirty:        newDirtyState(),
 		watchGroups:  make(map[string]*watchGroup),
 		lastActive:   lastActive,
 		statePath:    activityStatePath(),
@@ -216,6 +219,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.scanLoop(ctx)
 	go a.worktreeWatchLoop(ctx)
 	go a.supervisor.Run(ctx)
+	go a.dirtyLoop(ctx)
 	go a.hibernateLoop(ctx)
 	go a.flushActivityLoop(ctx)
 	go a.compactionLoop(ctx)
@@ -543,6 +547,7 @@ func (a *App) Scan(ctx context.Context) error {
 	a.mu.Unlock()
 
 	a.notifyStatus()
+	a.dirty.wakeUp()
 	a.log.Info("scan complete",
 		"projects", len(projects),
 		"errors", len(scanErrors),

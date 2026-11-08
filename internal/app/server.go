@@ -540,6 +540,7 @@ func (a *App) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	sub := a.hub.Subscribe()
 	defer a.hub.Unsubscribe(sub)
+	a.dirty.wakeUp()
 
 	// Every connection starts with a complete snapshot, so a reconnect needs no
 	// replay and the client never depends on frames it missed. Subscribing first

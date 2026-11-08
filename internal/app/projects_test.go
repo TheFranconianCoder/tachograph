@@ -49,7 +49,10 @@ func TestProjectsSnapshotAddsStatsToLinkedWorktrees(t *testing.T) {
 			"/repo/main":    {Time: at, Kind: "snapshot", Path: "/repo/main", Stats: stats},
 			"/repo/feature": {Time: at, Kind: "snapshot", Path: "/repo/feature", Stats: stats},
 		},
+		dirty: newDirtyState(),
 	}
+	a.dirty.set("/repo/main", true)
+	a.dirty.set("/repo/feature", true)
 
 	projects := a.projectsSnapshot()
 	if len(projects) != 1 {
@@ -61,13 +64,22 @@ func TestProjectsSnapshotAddsStatsToLinkedWorktrees(t *testing.T) {
 			if worktree.Stats != nil {
 				t.Errorf("main worktree stats = %+v, want nil", worktree.Stats)
 			}
+			if !worktree.Dirty {
+				t.Error("main worktree dirty = false, want true")
+			}
 		case "/repo/feature":
 			if worktree.Stats == nil || worktree.Stats.Added != 12 || worktree.Stats.Deleted != 3 {
 				t.Errorf("linked worktree stats = %+v, want +12 -3", worktree.Stats)
 			}
+			if !worktree.Dirty {
+				t.Error("linked worktree dirty = false, want true")
+			}
 		case "/repo/no-stats":
 			if worktree.Stats != nil {
 				t.Errorf("worktree without activity stats = %+v, want nil", worktree.Stats)
+			}
+			if worktree.Dirty {
+				t.Error("clean worktree dirty = true, want false")
 			}
 		}
 	}
