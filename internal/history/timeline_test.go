@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TheFranconianCoder/tachograph/internal/difft"
 )
@@ -67,6 +68,13 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 	first, err := recorder.Snapshot(ctx)
 	if err != nil {
 		t.Fatalf("first snapshot: %v", err)
+	}
+	afterInitial, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline after initialization: %v", err)
+	}
+	if len(afterInitial.Entries) != 0 {
+		t.Errorf("timeline after initialization = %+v, want no entries", afterInitial.Entries)
 	}
 	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
 	second, err := recorder.Snapshot(ctx)
@@ -159,6 +167,61 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 	}
 	if _, err := recorder.SnapshotDetail(ctx, strings.Repeat("0", 40), ""); !errors.Is(err, ErrSnapshotNotFound) {
 		t.Errorf("SnapshotDetail(missing) error = %v, want ErrSnapshotNotFound", err)
+	}
+}
+
+func TestTimelineHidesArchiveAndInitialCopy(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	project := filepath.Join(base, "project")
+	worktree := filepath.Join(base, "worktree")
+	store := New(filepath.Join(base, "history"))
+
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, project, "init", "-b", "main")
+	mustGit(t, project, "config", "user.name", "Test")
+	mustGit(t, project, "config", "user.email", "test@example.com")
+	mustGit(t, project, "config", "commit.gpgsign", "false")
+	writeFile(t, filepath.Join(project, "a.txt"), "base\n")
+	mustGit(t, project, "add", "-A")
+	mustGit(t, project, "commit", "-m", "base")
+	mustGit(t, project, "worktree", "add", "-b", "feature", worktree)
+
+	recorder, err := store.Ensure(ctx, worktree)
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "a.txt"), "one\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "a.txt"), "two\n")
+	if _, err := recorder.Snapshot(ctx); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	// Drop everything except the tip and archive the state before it. The
+	// initial source copy survives only as an archive root.
+	opts := RetentionOptions{
+		KeepMinimum: 1,
+		MaxAge:      time.Nanosecond,
+		Archive:     true,
+	}
+	if _, err := store.CompactProject(ctx, recorder.Project.Dir, opts); err != nil {
+		t.Fatalf("CompactProject: %v", err)
+	}
+
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline: %v", err)
+	}
+	if len(page.Entries) != 1 {
+		t.Fatalf("timeline entries = %+v, want only the real diff", page.Entries)
+	}
+	if page.Entries[0].Kind != "snapshot" {
+		t.Errorf("entry kind = %q, want snapshot", page.Entries[0].Kind)
 	}
 }
 

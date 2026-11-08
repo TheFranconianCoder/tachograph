@@ -264,9 +264,11 @@ func (r *Recorder) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	stats := parseNumstat(numstat)
 	// The first snapshot copies the whole source tree. Its diffstats describe
-	// the initialization, not a change, so leave them empty.
+	// the initialization, not a change, so leave them empty. An empty archive
+	// root is the same state after compaction.
 	if subject, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%s", "HEAD"); err == nil &&
-		strings.HasPrefix(subject, "base:") {
+		(strings.HasPrefix(subject, "base:") ||
+			(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, "HEAD"))) {
 		stats = nil
 	}
 

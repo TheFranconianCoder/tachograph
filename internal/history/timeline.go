@@ -127,26 +127,44 @@ func (r *Recorder) Timeline(ctx context.Context, limit, offset int, file string)
 }
 
 // timelineLowerBound returns the newest commit that should stay out of the
-// timeline. The empty initialization commit and the first snapshot, which is
-// just a copy of the source tree, are not changes worth showing.
+// timeline. The root is always a state, not a change: the initialization
+// commit, an archive root, or the first source copy. When that state is empty,
+// its first child is the source copy as well and is hidden too.
 func (r *Recorder) timelineLowerBound(ctx context.Context) string {
 	root, err := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
 	if err != nil || root == "" {
 		return ""
 	}
 	subject, err := runGit(ctx, r.Placeholder, "show", "-s", "--format=%s", root)
-	if err != nil || !strings.HasPrefix(subject, "base:") {
+	if err != nil {
 		return ""
 	}
-	commits, err := runGit(ctx, r.Placeholder, "rev-list", "--ancestry-path", "--reverse", root+"..HEAD")
+
+	lower := root
+	if strings.HasPrefix(subject, "base:") ||
+		(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, root)) {
+		if child := r.firstCommitAfter(ctx, root); child != "" {
+			lower = child
+		}
+	}
+	return lower
+}
+
+// treeEmpty reports whether a commit's tree contains no files.
+func (r *Recorder) treeEmpty(ctx context.Context, hash string) bool {
+	output, err := runGit(ctx, r.Placeholder, "ls-tree", "-r", "--name-only", hash)
+	return err == nil && strings.TrimSpace(output) == ""
+}
+
+// firstCommitAfter returns the oldest commit that is an ancestor of HEAD but
+// not of hash.
+func (r *Recorder) firstCommitAfter(ctx context.Context, hash string) string {
+	commits, err := runGit(ctx, r.Placeholder, "rev-list", "--ancestry-path", "--reverse", hash+"..HEAD")
 	if err != nil {
-		return root
+		return ""
 	}
-	initial, _, _ := strings.Cut(strings.TrimSpace(commits), "\n")
-	if initial == "" {
-		return root
-	}
-	return initial
+	first, _, _ := strings.Cut(strings.TrimSpace(commits), "\n")
+	return first
 }
 
 // SnapshotDetail returns the file list and patch for one commit. When file is
