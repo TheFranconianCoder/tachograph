@@ -1,5 +1,7 @@
 import { mount } from 'svelte';
 
+import '@fontsource-variable/jetbrains-mono';
+import '@fontsource-variable/jetbrains-mono/wght-italic.css';
 import './app.css';
 import { initTheme } from './lib/theme.svelte';
 import { trackWindowControls } from './lib/window-controls';

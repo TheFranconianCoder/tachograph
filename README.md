@@ -263,8 +263,10 @@ A heartbeat every 20 s keeps the stream alive; reconnects fetch a fresh snapshot
 missed. There is no status polling in the browser.
 
 The interface follows the Thought Keeper design system: warm paper in light, graphite in dark, one
-functional accent and semantic colours only for states. The theme starts at `auto` (follow the OS);
-the sun/moon button in the topbar cycles auto → light → dark and stores the choice.
+functional accent and semantic colours only for states. JetBrains Mono ships as a self-hosted variable
+web font, so paths, metadata and diff panes keep the same monospace face on every platform. The
+theme starts at `auto` (follow the OS); the sun/moon button in the topbar cycles auto → light → dark
+and stores the choice.
 
 Deleted worktrees are removed on the next scan: the placeholder, its snapshot branch and its activity
 entry disappear. When it was the project's last worktree, the whole project store (the shared history

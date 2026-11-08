@@ -6,7 +6,8 @@
 
 :root {
     --font-sans: Inter, 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
-    --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Fira Code', ui-monospace,
+        SFMono-Regular, Menlo, monospace;
 
     --bg: #f7f5f1;
     --bg-sidebar: #f2efe9;
