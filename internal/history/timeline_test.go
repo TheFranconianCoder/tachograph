@@ -170,6 +170,61 @@ func TestTimelineAndSnapshotDetail(t *testing.T) {
 	}
 }
 
+func TestTimelineShowsCompleteMainWorktreeHistory(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	project := filepath.Join(base, "project")
+	store := New(filepath.Join(base, "history"))
+
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, project, "init", "-b", "main")
+	mustGit(t, project, "config", "user.name", "Test")
+	mustGit(t, project, "config", "user.email", "test@example.com")
+	mustGit(t, project, "config", "commit.gpgsign", "false")
+	writeFile(t, filepath.Join(project, "a.txt"), "base\n")
+	mustGit(t, project, "add", "-A")
+	mustGit(t, project, "commit", "-m", "base")
+
+	recorder, err := store.Ensure(ctx, project)
+	if err != nil {
+		t.Fatalf("Ensure(main worktree): %v", err)
+	}
+	if !recorder.isMainWorktree() {
+		t.Fatal("recorder is not marked as the main worktree")
+	}
+
+	writeFile(t, filepath.Join(project, "a.txt"), "one\n")
+	initial, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("initial snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(project, "a.txt"), "two\n")
+	second, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline: %v", err)
+	}
+	if len(page.Entries) != 3 {
+		t.Fatalf("timeline entries = %+v, want base, initial copy and diff", page.Entries)
+	}
+	if oldest := page.Entries[len(page.Entries)-1]; oldest.Kind != "base" {
+		t.Errorf("oldest entry kind = %q, want base", oldest.Kind)
+	}
+	hashes := map[string]bool{}
+	for _, entry := range page.Entries {
+		hashes[entry.Hash] = true
+	}
+	if !hashes[initial.Hash] || !hashes[second.Hash] {
+		t.Errorf("timeline hashes = %v, want the initial copy and the diff", hashes)
+	}
+}
+
 func TestTimelineHidesArchiveAndInitialCopy(t *testing.T) {
 	ctx := t.Context()
 	base := t.TempDir()

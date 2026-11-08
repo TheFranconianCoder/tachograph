@@ -7,7 +7,7 @@ same for Git worktrees: it records the states between commits, keeps them out of
 graph, and gives every worktree its own timeline.
 
 > Status: **v0.1.0 — first release** — every worktree has a snapshot timeline with a file filter,
-> a coloured per-file diff, file/directory restore and snapshot labels, recorded by watchexec
+> a colored per-file diff, snapshot revert and snapshot labels, recorded by watchexec
 > events with an adaptive poll fallback. Release binaries are built for Linux, macOS and Windows.
 
 ---
@@ -242,7 +242,7 @@ GET  /api/v1/timeline?path=<worktree>&limit=50&offset=0&file=<relative path>
 GET  /api/v1/snapshot?path=<worktree>&hash=<commit>&file=<relative path>
 GET  /api/v1/range?path=<worktree>&from=<older>&to=<newer>&file=<relative path>
 PUT  /api/v1/snapshot/label  {"path": "...", "hash": "...", "label": "before refactor"}
-POST /api/v1/restore   {"path": "...", "hash": "...", "file": "src/app.go"}
+POST /api/v1/revert    {"path": "...", "from": "...", "to": "..."}
 ```
 
 The list contains only the relative time and the short hash; the snapshot itself is shown in the
@@ -262,22 +262,22 @@ Every view has an addressable URL:
 The worktree ID is the stable 12-character ID from the status API. Selecting a snapshot pushes a
 history entry, so browser back/forward walks the timeline, and a deep link survives a reload (the
 server falls back to the single-page app for unknown paths). Clicking a changed file narrows the
-diff to that file; the complete file list stays visible and "All files" restores the full patch.
+diff to that file; the complete file list stays visible and "All files" shows the full patch.
 **Shift-click** a second snapshot to compare the contiguous range: the patch spans from the parent
 of the older selection to the newer one, so the oldest selected change is included. The range bar
-shows the count and both endpoints; "Single snapshot" collapses it again. The refresh icon on a file
-row fills the restore path without changing the diff scope. If a link
-points at a worktree that no longer exists, the UI says so instead of failing silently.
+shows the count and both endpoints; "Single snapshot" collapses it again. If a link points at a
+worktree that no longer exists, the UI says so instead of failing silently.
 
 Every snapshot can carry a short label (up to 120 characters): click **Add label** (or the existing
 label chip) in the detail head and save. Labels appear as a chip and in the row tooltip, and they are
 kept in `labels.json` inside the project store. Compaction remaps labels onto rewritten commits and
 drops the labels of snapshots that no longer exist.
 
-Select a changed file (or type a file or directory path) and press **Restore** in the detail pane.
-The snapshot content is written back into the worktree; files that are absent from the snapshot are
-kept, submodules are skipped, and the next snapshot records the restore. The diff is capped at 500
-files and 256 KiB.
+Select one snapshot or a range and press **Revert** in the detail pane. The reverse of the selected
+change is written into the worktree: changed and deleted files are restored from the parent of the
+oldest selected snapshot, and files added in the selection are removed. Files outside the selection
+are kept, submodules are skipped, and the next snapshot records the revert. The diff is capped at
+500 files and 256 KiB.
 
 Projects are listed in one column, newest change first. The filter above the list narrows by project
 name, path, branch or state. Inside a project the **project header is the main worktree**: it carries
@@ -423,7 +423,7 @@ roots:
 - A new **worktree** can run lifecycle actions: copy local files such as `.env` or `.env.local` from
   the main worktree and run a local setup command before the first snapshot.
 - The UI shows the timeline per worktree, filters it by file, shows a read-only snapshot diff and
-  restores a file or directory from any snapshot.
+  reverts a snapshot or range into the worktree.
 
 The product plan lives at [`docs/plans/tachograph.md`](docs/plans/tachograph.md).
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,8 +31,9 @@ type TimelinePage struct {
 
 // SnapshotFile is one path changed by a snapshot.
 type SnapshotFile struct {
-	Path   string `json:"path"`
-	Status string `json:"status"`
+	Path    string `json:"path"`
+	OldPath string `json:"oldPath,omitempty"`
+	Status  string `json:"status"`
 }
 
 // SnapshotDetail is the metadata, file list and patch of one commit.
@@ -131,6 +133,12 @@ func (r *Recorder) Timeline(ctx context.Context, limit, offset int, file string)
 // commit, an archive root, or the first source copy. When that state is empty,
 // its first child is the source copy as well and is hidden too.
 func (r *Recorder) timelineLowerBound(ctx context.Context) string {
+	// The project's main branch is the source of truth. Show its complete
+	// history, including the initialization state and the first copy.
+	if r.isMainWorktree() {
+		return ""
+	}
+
 	root, err := runGit(ctx, r.Placeholder, "rev-list", "--max-parents=0", "HEAD")
 	if err != nil || root == "" {
 		return ""
@@ -148,6 +156,15 @@ func (r *Recorder) timelineLowerBound(ctx context.Context) string {
 		}
 	}
 	return lower
+}
+
+// isMainWorktree reports whether this recorder belongs to the project's main
+// checkout rather than a linked worktree.
+func (r *Recorder) isMainWorktree() bool {
+	if r.Project.MainWorktree == "" || r.Worktree.Path == "" {
+		return false
+	}
+	return filepath.Clean(r.Project.MainWorktree) == filepath.Clean(r.Worktree.Path)
 }
 
 // treeEmpty reports whether a commit's tree contains no files.
@@ -327,10 +344,16 @@ func (r *Recorder) changedFiles(ctx context.Context, from, to string) ([]Snapsho
 		}
 		status := fields[0]
 		path := fields[len(fields)-1]
+		oldPath := ""
 		if len(status) > 1 {
+			if status[0] == 'R' || status[0] == 'C' {
+				if len(fields) >= 3 {
+					oldPath = fields[1]
+				}
+			}
 			status = status[:1]
 		}
-		files = append(files, SnapshotFile{Path: path, Status: status})
+		files = append(files, SnapshotFile{Path: path, OldPath: oldPath, Status: status})
 		if len(files) >= snapshotMaxFiles {
 			truncated = true
 			break

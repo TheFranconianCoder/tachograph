@@ -4,7 +4,8 @@
     import { parseAnsiLine } from '../lib/ansi';
     import type { AnsiToken } from '../lib/ansi';
     import { absoluteTime, baseName, relativeTime } from '../lib/format';
-    import { fetchRange, fetchSnapshot, fetchTimeline, restoreSnapshot, setSnapshotLabel } from '../lib/timeline';
+    import { confirm } from '../lib/confirm.svelte';
+    import { fetchRange, fetchSnapshot, fetchTimeline, revertSnapshots, setSnapshotLabel } from '../lib/timeline';
     import type { SnapshotDetail, TimelineEntry } from '../lib/timeline';
     import { resolvedTheme } from '../lib/theme.svelte';
     import type { Worktree } from '../lib/types';
@@ -31,6 +32,10 @@
         onClose,
     }: Props = $props();
 
+    // Status frames replace the worktree object. The derived string keeps the
+    // path stable so effects do not refetch on every scan.
+    const worktreePath = $derived(worktree.path);
+
     let entries = $state<TimelineEntry[]>([]);
     let hasMore = $state(false);
     let loading = $state(false);
@@ -40,10 +45,9 @@
     let detail = $state<SnapshotDetail | null>(null);
     let detailLoading = $state(false);
     let detailError = $state<string | null>(null);
-    let restorePath = $state('');
-    let restoring = $state(false);
-    let restoreMessage = $state<string | null>(null);
-    let restoreError = $state<string | null>(null);
+    let reverting = $state(false);
+    let revertMessage = $state<string | null>(null);
+    let revertError = $state<string | null>(null);
     let labelEditing = $state(false);
     let labelDraft = $state('');
     let labelSaving = $state(false);
@@ -99,7 +103,7 @@
         error = null;
         try {
             const offset = reset ? 0 : entries.length;
-            const page = await fetchTimeline(worktree.path, 50, offset, fileFilter);
+            const page = await fetchTimeline(worktreePath, 50, offset, fileFilter);
             entries = reset ? page.entries : [...entries, ...page.entries];
             hasMore = page.hasMore;
         } catch (cause) {
@@ -109,30 +113,39 @@
         }
     }
 
-    async function restore(event: SubmitEvent): Promise<void> {
-        event.preventDefault();
-        const target = restorePath.trim();
-        if (!detail || !target || restoring) return;
-        if (
-            !window.confirm(
-                `Restore ${target} from ${detail.hash.slice(0, 8)}? This overwrites local changes in that path.`
-            )
-        ) {
-            return;
-        }
-        restoring = true;
-        restoreError = null;
-        restoreMessage = null;
+    async function requestRevert(): Promise<void> {
+        if (!detail || reverting) return;
+        if (detail.kind !== 'snapshot' && detail.kind !== 'range') return;
+        const from = detail.kind === 'range' ? detail.from : detail.hash;
+        const to = detail.hash;
+        if (!from || !to) return;
+
+        const range = detail.kind === 'range';
+        const count = detail.count && detail.count > 1 ? `${detail.count} snapshots` : 'this range';
+        const confirmed = await confirm({
+            title: range ? 'Revert snapshot range' : 'Revert snapshot',
+            message: range
+                ? `Revert the changes of ${count}? Files added in the range are deleted; changed files are restored to their state before the range. The next snapshot records the revert.`
+                : 'Revert this snapshot? Files it added are deleted; changed files are restored to their previous state. The next snapshot records the revert.',
+            confirmLabel: 'Revert',
+            cancelLabel: 'Cancel',
+            danger: true,
+        });
+        if (!confirmed) return;
+
+        reverting = true;
+        revertError = null;
+        revertMessage = null;
         try {
-            const result = await restoreSnapshot(worktree.path, detail.hash, target);
-            const count = result.restored.length;
-            restoreMessage = `Restored ${count} file${count === 1 ? '' : 's'}${
-                result.skipped.length ? `, skipped ${result.skipped.length}` : ''
-            }. The next snapshot records the change.`;
+            const result = await revertSnapshots(worktreePath, from, to);
+            const parts = [`${result.restored.length} restored`, `${result.deleted.length} deleted`];
+            if (result.unchanged.length) parts.push(`${result.unchanged.length} unchanged`);
+            if (result.skipped.length) parts.push(`${result.skipped.length} skipped`);
+            revertMessage = `Revert done: ${parts.join(', ')}. The next snapshot records the change.`;
         } catch (cause) {
-            restoreError = cause instanceof Error ? cause.message : 'could not restore the path';
+            revertError = cause instanceof Error ? cause.message : 'could not revert the selection';
         } finally {
-            restoring = false;
+            reverting = false;
         }
     }
 
@@ -243,7 +256,7 @@
         labelSaving = true;
         labelError = null;
         try {
-            const saved = await setSnapshotLabel(worktree.path, hash, labelDraft);
+            const saved = await setSnapshotLabel(worktreePath, hash, labelDraft);
             if (selectedHash !== hash) return;
             detail = { ...detail, label: saved || undefined };
             const entry = entries.find(item => item.hash === hash);
@@ -283,9 +296,8 @@
         const appearance = resolvedTheme();
         const key = `${from ?? ''}|${hash ?? ''}`;
         if (key !== lastDetailKey) {
-            restorePath = '';
-            restoreMessage = null;
-            restoreError = null;
+            revertMessage = null;
+            revertError = null;
             labelEditing = false;
             labelDraft = '';
             labelSaving = false;
@@ -304,8 +316,8 @@
         void (async () => {
             try {
                 const result = from
-                    ? await fetchRange(worktree.path, from, hash, file ?? '', appearance)
-                    : await fetchSnapshot(worktree.path, hash, file ?? '', appearance);
+                    ? await fetchRange(worktreePath, from, hash, file ?? '', appearance)
+                    : await fetchSnapshot(worktreePath, hash, file ?? '', appearance);
                 if (!cancelled) detail = result;
             } catch (cause) {
                 if (!cancelled) {
@@ -347,8 +359,8 @@
     <header class="drawer-head">
         <div class="drawer-title">
             <h2>Timeline</h2>
-            <p class="drawer-sub mono truncate" title={worktree.path}>
-                {baseName(worktree.path)} · {worktree.branch}
+            <p class="drawer-sub mono truncate" title={worktreePath}>
+                {baseName(worktreePath)} · {worktree.branch}
             </p>
         </div>
         <button type="button" class="icon-btn" aria-label="Close timeline" onclick={onClose}>
@@ -440,14 +452,26 @@
                         <span class="faint" title={absoluteTime(detail.time)}>
                             {relativeTime(detail.time, now)}
                         </span>
-                        {#if detail.diffTool}
-                            <span
-                                class="diff-tool mono faint"
-                                title={diffToolTitle(detail.diffTool)}
-                            >
-                                {diffToolLabel(detail.diffTool)}
-                            </span>
-                        {/if}
+                        <span class="detail-head__actions">
+                            {#if detail.diffTool}
+                                <span
+                                    class="diff-tool mono faint"
+                                    title={diffToolTitle(detail.diffTool)}
+                                >
+                                    {diffToolLabel(detail.diffTool)}
+                                </span>
+                            {/if}
+                            {#if detail.kind === 'snapshot' || detail.kind === 'range'}
+                                <button
+                                    type="button"
+                                    class="btn btn--danger btn--sm"
+                                    disabled={reverting}
+                                    onclick={() => void requestRevert()}
+                                >
+                                    {reverting ? 'Reverting…' : 'Revert'}
+                                </button>
+                            {/if}
+                        </span>
                     </div>
                     {#if selectedFrom && selectedHash}
                         <div class="range-bar">
@@ -551,15 +575,6 @@
                                     </span>
                                     <span class="mono truncate" title={file.path}>{file.path}</span>
                                 </button>
-                                <button
-                                    type="button"
-                                    class="icon-btn icon-btn--inline"
-                                    title="Use this path for restore"
-                                    aria-label={`Use ${file.path} for restore`}
-                                    onclick={() => (restorePath = file.path)}
-                                >
-                                    <Icon name="refresh" size={12} />
-                                </button>
                             </div>
                         {/each}
                     </div>
@@ -571,33 +586,11 @@
                     <p class="muted">No file changes.</p>
                 {/if}
 
-                {#if detail.kind !== 'base'}
-                    <form class="detail-restore" onsubmit={restore}>
-                        <input
-                            class="input"
-                            type="text"
-                            placeholder="File or directory in this snapshot"
-                            bind:value={restorePath}
-                            disabled={restoring}
-                        />
-                        <button
-                            type="submit"
-                            class="btn btn--secondary btn--sm"
-                            disabled={restoring || !restorePath.trim()}
-                        >
-                            {restoring ? 'Restoring…' : 'Restore'}
-                        </button>
-                    </form>
-                    <p class="muted restore-note">
-                        Writes the path back into the worktree. Files that are absent from the
-                        snapshot are kept.
-                    </p>
-                    {#if restoreMessage}
-                        <p class="notice restore-notice">{restoreMessage}</p>
-                    {/if}
-                    {#if restoreError}
-                        <p class="notice notice--error restore-notice">{restoreError}</p>
-                    {/if}
+                {#if revertMessage}
+                    <p class="notice revert-notice">{revertMessage}</p>
+                {/if}
+                {#if revertError}
+                    <p class="notice notice--error revert-notice">{revertError}</p>
                 {/if}
 
                 {#if selectedFile}
@@ -825,8 +818,14 @@
         font-size: 10px;
     }
 
-    .diff-tool {
+    .detail-head__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
         margin-left: auto;
+    }
+
+    .diff-tool {
         font-size: 9px;
         letter-spacing: 0.04em;
         text-transform: uppercase;
@@ -955,10 +954,6 @@
         background: var(--bg-hover);
     }
 
-    .detail-file .icon-btn {
-        margin-right: 4px;
-    }
-
     .detail-file:last-child {
         border-bottom: 0;
     }
@@ -1046,25 +1041,7 @@
         margin-top: 6px;
     }
 
-    .detail-restore {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        margin: 12px 0 4px;
-    }
-
-    .detail-restore .input {
-        flex: 1;
-        height: 30px;
-        font-size: 11.5px;
-    }
-
-    .restore-note {
-        margin: 4px 0 8px;
-        font-size: 10.5px;
-    }
-
-    .restore-notice {
+    .revert-notice {
         margin: 8px 0;
     }
 

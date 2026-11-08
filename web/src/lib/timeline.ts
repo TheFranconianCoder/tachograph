@@ -15,6 +15,7 @@ export interface TimelinePage {
 
 export interface SnapshotFile {
     path: string;
+    oldPath?: string;
     status: string;
 }
 
@@ -89,23 +90,25 @@ export async function fetchSnapshot(
     return (await response.json()) as SnapshotDetail;
 }
 
-export interface RestoreResult {
+export interface RevertResult {
     restored: string[];
+    deleted: string[];
+    unchanged: string[];
     skipped: string[];
 }
 
-export async function restoreSnapshot(
+export async function revertSnapshots(
     path: string,
-    hash: string,
-    file: string
-): Promise<RestoreResult> {
-    const response = await fetch('/api/v1/restore', {
+    from: string,
+    to: string
+): Promise<RevertResult> {
+    const response = await fetch('/api/v1/revert', {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ path, hash, file }),
+        body: JSON.stringify({ path, from, to }),
     });
     if (!response.ok) throw new Error(await errorMessage(response));
-    return (await response.json()) as RestoreResult;
+    return (await response.json()) as RevertResult;
 }
 
 export async function setSnapshotLabel(

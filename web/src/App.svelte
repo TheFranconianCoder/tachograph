@@ -7,6 +7,7 @@
     import WorktreeSetupCard from './components/WorktreeSetupCard.svelte';
     import TimelineDrawer from './components/TimelineDrawer.svelte';
     import Topbar from './components/layout/Topbar.svelte';
+    import ConfirmDialog from './components/ui/ConfirmDialog.svelte';
     import EmptyState from './components/ui/EmptyState.svelte';
     import Icon from './components/ui/Icon.svelte';
     import { EventStream } from './lib/events/event-stream';
@@ -558,6 +559,8 @@
         </div>
     {/if}
 </div>
+
+<ConfirmDialog />
 
 <style>
     .single-window {

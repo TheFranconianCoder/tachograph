@@ -93,7 +93,7 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/snapshot", a.handleSnapshot)
 	mux.HandleFunc("GET /api/v1/range", a.handleRange)
 	mux.HandleFunc("PUT /api/v1/snapshot/label", a.handleSetLabel)
-	mux.HandleFunc("POST /api/v1/restore", a.handleRestore)
+	mux.HandleFunc("POST /api/v1/revert", a.handleRevert)
 	mux.HandleFunc("GET /api/v1/roots", a.handleRootsList)
 	mux.HandleFunc("POST /api/v1/roots", a.handleRootAdd)
 	mux.HandleFunc("DELETE /api/v1/roots", a.handleRootRemove)
@@ -343,19 +343,19 @@ func (a *App) handleSetLabel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"label": label})
 }
 
-func (a *App) handleRestore(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleRevert(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Path string `json:"path"`
-		Hash string `json:"hash"`
-		File string `json:"file"`
+		From string `json:"from"`
+		To   string `json:"to"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if strings.TrimSpace(request.Path) == "" || strings.TrimSpace(request.Hash) == "" ||
-		strings.TrimSpace(request.File) == "" {
-		writeError(w, http.StatusBadRequest, "path, hash and file are required")
+	if strings.TrimSpace(request.Path) == "" || strings.TrimSpace(request.From) == "" ||
+		strings.TrimSpace(request.To) == "" {
+		writeError(w, http.StatusBadRequest, "path, from and to are required")
 		return
 	}
 
@@ -364,7 +364,11 @@ func (a *App) handleRestore(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	result, err := recorder.Restore(r.Context(), request.Hash, request.File)
+	result, err := recorder.Revert(r.Context(), request.From, request.To)
+	if errors.Is(err, history.ErrSnapshotNotFound) {
+		writeError(w, http.StatusNotFound, "snapshot not found; it may have been compacted away")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
