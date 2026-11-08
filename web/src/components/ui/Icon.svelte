@@ -9,6 +9,7 @@
 
     const paths: Record<string, string> = {
         search: 'M8.8 3.2a5.6 5.6 0 1 0 3.9 9.6l3.5 3.5 M8.8 3.2a5.6 5.6 0 0 1 3.9 9.6',
+        filter: 'M3.5 4.5h13L11 11v5l-2 1v-6z',
         plus: 'M10 4v12 M4 10h12',
         close: 'M5 5l10 10 M15 5 5 15',
         check: 'M4 10.5 8 14.5 16 5.5',

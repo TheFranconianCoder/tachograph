@@ -331,7 +331,9 @@ Every view has an addressable URL:
 The worktree ID is the stable 12-character ID from the status API. Selecting a snapshot pushes a
 history entry, so browser back/forward walks the timeline, and a deep link survives a reload (the
 server falls back to the single-page app for unknown paths). Clicking a changed file narrows the
-diff to that file. **Shift-, Ctrl- or Cmd-click** selects multiple files; both the diff and the
+diff to that file. The funnel icon at the right edge of a file row fills **Filter by file** with that
+path and applies it immediately, so the timeline lists only the snapshots that touched the file.
+**Shift-, Ctrl- or Cmd-click** selects multiple files; both the diff and the
 revert then apply to the selection. The complete file list stays visible and "All files" shows the
 full patch. **Shift-click** a second snapshot to compare the contiguous range: the patch spans from the parent
 of the older selection to the newer one, so the oldest selected change is included. The range bar

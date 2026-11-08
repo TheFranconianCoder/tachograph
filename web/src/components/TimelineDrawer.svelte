@@ -68,6 +68,7 @@
 
     let lastSnapshots = $state<number | null>(null);
     let lastDetailKey = '';
+    let pendingReload = false;
     let anchorHash = $state<string | null>(null);
     let anchorPath = $state<string | null>(null);
     const selectedSet = $derived(new Set(selectedFiles));
@@ -114,7 +115,10 @@
     });
 
     async function load(reset: boolean): Promise<void> {
-        if (loading) return;
+        if (loading) {
+            if (reset) pendingReload = true;
+            return;
+        }
         loading = true;
         error = null;
         try {
@@ -126,6 +130,10 @@
             error = cause instanceof Error ? cause.message : 'could not load the timeline';
         } finally {
             loading = false;
+            if (pendingReload) {
+                pendingReload = false;
+                void load(true);
+            }
         }
     }
 
@@ -234,6 +242,13 @@
     function applyFilter(event: SubmitEvent): void {
         event.preventDefault();
         fileFilter = fileInput.trim();
+        onSelect(null);
+        void load(true);
+    }
+
+    function filterByFile(path: string): void {
+        fileInput = path;
+        fileFilter = path;
         onSelect(null);
         void load(true);
     }
@@ -668,6 +683,15 @@
                                     </span>
                                     <span class="mono truncate" title={file.path}>{file.path}</span>
                                 </button>
+                                <button
+                                    type="button"
+                                    class="icon-btn icon-btn--inline detail-file__filter"
+                                    title={`Filter timeline by ${file.path}`}
+                                    aria-label={`Filter timeline by ${file.path}`}
+                                    onclick={() => filterByFile(file.path)}
+                                >
+                                    <Icon name="filter" size={13} />
+                                </button>
                             </div>
                         {/each}
                     </div>
@@ -1076,6 +1100,15 @@
 
     .detail-file__main:hover {
         background: var(--bg-hover);
+    }
+
+    .detail-file__filter {
+        flex: none;
+        margin-right: 4px;
+    }
+
+    .detail-file__filter:hover {
+        color: var(--accent);
     }
 
     .detail-file:last-child {
