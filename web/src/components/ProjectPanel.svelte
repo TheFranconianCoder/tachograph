@@ -2,6 +2,7 @@
     import Icon from './ui/Icon.svelte';
     import Lamp from './ui/Lamp.svelte';
     import DirtyMarker from './ui/DirtyMarker.svelte';
+    import SyncBadge from './ui/SyncBadge.svelte';
     import WorktreeRow from './WorktreeRow.svelte';
     import { lifecycleTitle, progressTitle, relativeTime, watcherTitle } from '../lib/format';
     import type { Project, Worktree } from '../lib/types';
@@ -78,6 +79,13 @@
                 >
                     <Icon name={copiedPath === project.historyRepo ? 'check' : 'layers'} size={13} />
                 </button>
+            {/if}
+            {#if main}
+                <SyncBadge
+                    ahead={main.ahead ?? 0}
+                    behind={main.behind ?? 0}
+                    upstream={main.upstream}
+                />
             {/if}
         </div>
 

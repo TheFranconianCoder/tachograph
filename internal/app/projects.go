@@ -42,6 +42,12 @@ type WorktreeStatus struct {
 	// Dirty describes the source checkout, not the snapshot store: git status
 	// reports uncommitted or untracked changes against HEAD.
 	Dirty bool `json:"dirty,omitempty"`
+	// Upstream, Ahead and Behind describe the branch position against the
+	// configured upstream. The counts compare local commits and remote-tracking
+	// refs, so they reflect the last fetch; Tachograph never fetches.
+	Upstream string `json:"upstream,omitempty"`
+	Ahead    int    `json:"ahead,omitempty"`
+	Behind   int    `json:"behind,omitempty"`
 	// Stats describe the cumulative change since initialization. Linked
 	// worktrees show them in the project list; the main worktree stays without
 	// numbers because it is the source tree.
@@ -78,11 +84,15 @@ func (a *App) projectsSnapshot() []ProjectStatus {
 	// Linked worktrees show the same +/- numbers as the activity table. The
 	// main checkout is the source tree and deliberately stays without stats.
 	stats := a.worktreeStats()
-	dirty := a.dirty.snapshot()
+	source := a.dirty.snapshot()
 	for i := range projects {
 		for j := range projects[i].Worktrees {
 			worktree := &projects[i].Worktrees[j]
-			worktree.Dirty = dirty[filepath.Clean(worktree.Path)]
+			state := source[filepath.Clean(worktree.Path)]
+			worktree.Dirty = state.Dirty
+			worktree.Upstream = state.Upstream
+			worktree.Ahead = state.Ahead
+			worktree.Behind = state.Behind
 			if samePath(worktree.Path, projects[i].MainWorktree) {
 				continue
 			}

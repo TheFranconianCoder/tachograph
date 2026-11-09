@@ -261,6 +261,11 @@ worktree: `git status` reports uncommitted or untracked, non-ignored changes aga
 marker describes the real checkout, not the snapshot store; it refreshes every few seconds while the
 UI is connected.
 
+Next to the history-repository button in the project header, a compact `↑N ↓M` badge shows how many
+commits the main worktree is ahead of (to push) or behind (to pull) its configured upstream. The
+badge only appears when at least one count is non-zero. The numbers compare against the local
+remote-tracking refs, so they match the last fetch; Tachograph never fetches by itself.
+
 The UI is live: it opens one SSE connection to `GET /api/v1/events`, receives a full status snapshot
 on connect and after every change, and shows the connection state in the topbar and the status card.
 Only one UI window is active. A second window announces itself over a `BroadcastChannel`, focuses the

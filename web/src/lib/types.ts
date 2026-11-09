@@ -15,6 +15,9 @@ export interface Worktree {
     intervalMs?: number;
     watcherError?: string;
     dirty?: boolean;
+    upstream?: string;
+    ahead?: number;
+    behind?: number;
     stats?: ChangeStats;
 }
 

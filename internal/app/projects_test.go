@@ -51,8 +51,8 @@ func TestProjectsSnapshotAddsStatsToLinkedWorktrees(t *testing.T) {
 		},
 		dirty: newDirtyState(),
 	}
-	a.dirty.set("/repo/main", true)
-	a.dirty.set("/repo/feature", true)
+	a.dirty.set("/repo/main", sourceState{Dirty: true})
+	a.dirty.set("/repo/feature", sourceState{Dirty: true})
 
 	projects := a.projectsSnapshot()
 	if len(projects) != 1 {

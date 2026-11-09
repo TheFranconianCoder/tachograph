@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,17 +20,27 @@ const (
 	dirtyCheckWorkers    = 4
 )
 
+// sourceState describes one real checkout: uncommitted changes plus the branch
+// position against its configured upstream. The counts compare local commits
+// and remote-tracking refs, so they are as fresh as the last fetch.
+type sourceState struct {
+	Dirty    bool
+	Upstream string
+	Ahead    int
+	Behind   int
+}
+
 // dirtyState caches the source worktree state for the project list. The state
 // describes the real checkout, not the snapshot store.
 type dirtyState struct {
 	mu     sync.Mutex
-	values map[string]bool
+	values map[string]sourceState
 	wake   chan struct{}
 }
 
 func newDirtyState() *dirtyState {
 	return &dirtyState{
-		values: make(map[string]bool),
+		values: make(map[string]sourceState),
 		wake:   make(chan struct{}, 1),
 	}
 }
@@ -48,27 +59,27 @@ func (d *dirtyState) wakeUp() {
 
 // snapshot returns a copy for the status builder. Callers never hold the lock
 // while encoding or sending a frame.
-func (d *dirtyState) snapshot() map[string]bool {
+func (d *dirtyState) snapshot() map[string]sourceState {
 	if d == nil {
 		return nil
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	values := make(map[string]bool, len(d.values))
-	for path, dirty := range d.values {
-		values[path] = dirty
+	values := make(map[string]sourceState, len(d.values))
+	for path, state := range d.values {
+		values[path] = state
 	}
 	return values
 }
 
 // set records one worktree and reports whether the visible value changed.
-func (d *dirtyState) set(path string, dirty bool) bool {
+func (d *dirtyState) set(path string, state sourceState) bool {
 	key := filepath.Clean(path)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	previous, known := d.values[key]
-	d.values[key] = dirty
-	return !known || previous != dirty
+	d.values[key] = state
+	return !known || previous != state
 }
 
 // prune drops worktrees that no longer exist.
@@ -133,7 +144,7 @@ func (a *App) refreshDirty(ctx context.Context) {
 
 	type result struct {
 		path  string
-		dirty bool
+		state sourceState
 	}
 	results := make(chan result, len(paths))
 	semaphore := make(chan struct{}, dirtyCheckWorkers)
@@ -145,14 +156,14 @@ func (a *App) refreshDirty(ctx context.Context) {
 			defer workers.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-			dirty, err := worktreeDirty(ctx, path)
+			state, err := worktreeSourceState(ctx, path)
 			if err != nil {
 				if a.log != nil {
 					a.log.Debug("could not read worktree status", "path", path, "err", err)
 				}
 				return
 			}
-			results <- result{path: path, dirty: dirty}
+			results <- result{path: path, state: state}
 		}()
 	}
 	workers.Wait()
@@ -160,7 +171,7 @@ func (a *App) refreshDirty(ctx context.Context) {
 
 	changed := false
 	for item := range results {
-		if a.dirty.set(item.path, item.dirty) {
+		if a.dirty.set(item.path, item.state) {
 			changed = true
 		}
 	}
@@ -194,20 +205,53 @@ func (a *App) worktreePaths() []string {
 	return paths
 }
 
-// worktreeDirty reports whether the source checkout has uncommitted changes
-// against HEAD. --no-optional-locks keeps the background check from writing the
-// index or competing with the user's own git commands.
-func worktreeDirty(ctx context.Context, path string) (bool, error) {
+// worktreeSourceState reports uncommitted changes plus the branch position
+// against the configured upstream. Plain `git status` already computes
+// ahead/behind by default; `--porcelain=v2 --branch` only prints the result, so
+// no extra process or network access is needed. --no-optional-locks keeps the
+// background check from writing the index or competing with the user's own git
+// commands.
+func worktreeSourceState(ctx context.Context, path string) (sourceState, error) {
 	ctx, cancel := context.WithTimeout(ctx, dirtyCheckTimeout)
 	defer cancel()
 
 	command := exec.CommandContext(ctx, "git", "--no-optional-locks", "-C", path,
-		"status", "--porcelain", "--untracked-files=normal")
+		"status", "--porcelain=v2", "--branch", "--untracked-files=normal")
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
-		return false, fmt.Errorf("git status: %w (%s)", err, strings.TrimSpace(stderr.String()))
+		return sourceState{}, fmt.Errorf("git status: %w (%s)", err, strings.TrimSpace(stderr.String()))
 	}
-	return strings.TrimSpace(stdout.String()) != "", nil
+	return parseSourceState(stdout.String()), nil
+}
+
+// parseSourceState reads the branch headers of a `git status --porcelain=v2
+// --branch` output. Every non-header line describes a pending change.
+func parseSourceState(output string) sourceState {
+	var state sourceState
+	for _, line := range strings.Split(output, "\n") {
+		switch {
+		case strings.HasPrefix(line, "# branch.upstream "):
+			state.Upstream = strings.TrimSpace(strings.TrimPrefix(line, "# branch.upstream "))
+		case strings.HasPrefix(line, "# branch.ab "):
+			fields := strings.Fields(strings.TrimPrefix(line, "# branch.ab "))
+			if len(fields) != 2 {
+				continue
+			}
+			if value, err := strconv.Atoi(strings.TrimPrefix(fields[0], "+")); err == nil {
+				state.Ahead = value
+			}
+			if value, err := strconv.Atoi(strings.TrimPrefix(fields[1], "-")); err == nil {
+				state.Behind = value
+			}
+		case strings.HasPrefix(line, "# "):
+			// Other branch headers (oid, head, stash) do not affect the state.
+		case strings.TrimSpace(line) == "":
+			// The trailing newline of the output.
+		default:
+			state.Dirty = true
+		}
+	}
+	return state
 }
