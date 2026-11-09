@@ -28,7 +28,7 @@
         align-items: baseline;
         flex: none;
         gap: 5px;
-        color: var(--faint);
+        color: var(--warning);
         font-size: 10.5px;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
