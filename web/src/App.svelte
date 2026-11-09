@@ -16,13 +16,14 @@
     import { currentRoute, navigate, startRouter, timelineURL } from './lib/router';
     import { claimAsPrimary, claimWindow, focusPrimaryWindow } from './lib/single-window';
     import type { Route } from './lib/router';
-    import type { ConnectionState, Status, Worktree } from './lib/types';
+    import type { ConnectionState, Project, Status, Worktree } from './lib/types';
 
     let status = $state<Status | null>(null);
     let actionError = $state<string | null>(null);
     let rootInput = $state('');
     let patternInput = $state('');
     let filterQuery = $state('');
+    let activeOnly = $state(false);
     let busy = $state(false);
     let copiedPath = $state<string | null>(null);
     let now = $state(Date.now());
@@ -178,10 +179,23 @@
         navigate('/', true);
     }
 
+    // Active projects have uncommitted changes, upstream differences, or at
+    // least one linked worktree besides the main checkout.
+    function isActiveProject(project: Project): boolean {
+        return project.worktrees.some(
+            worktree =>
+                (worktree.dirty ?? false) ||
+                (worktree.ahead ?? 0) > 0 ||
+                (worktree.behind ?? 0) > 0 ||
+                worktree.path !== project.mainWorktree
+        );
+    }
+
     const filteredProjects = $derived.by(() => {
         const query = filterQuery.trim().toLowerCase();
-        if (!query) return projects;
-        return projects.filter(project => {
+        const visible = activeOnly ? projects.filter(isActiveProject) : projects;
+        if (!query) return visible;
+        return visible.filter(project => {
             const haystack = [
                 project.name,
                 project.commonDir,
@@ -449,11 +463,25 @@
                         {filteredProjects.length} of {projects.length} · {worktreeCount} worktrees
                     </span>
                     <span class="spacer"></span>
-                    {#if filterQuery}
+                    <button
+                        type="button"
+                        class="btn btn--ghost btn--sm"
+                        class:active={activeOnly}
+                        aria-pressed={activeOnly}
+                        title="Show only projects with uncommitted changes, upstream differences, or linked worktrees"
+                        onclick={() => (activeOnly = !activeOnly)}
+                    >
+                        <Icon name="filter" size={14} />
+                        Active only
+                    </button>
+                    {#if filterQuery || activeOnly}
                         <button
                             type="button"
                             class="btn btn--ghost btn--sm"
-                            onclick={() => (filterQuery = '')}
+                            onclick={() => {
+                                filterQuery = '';
+                                activeOnly = false;
+                            }}
                         >
                             <Icon name="close" size={14} />
                             Clear
@@ -479,11 +507,19 @@
                     text="Add a root above and run a scan. Tachograph looks for Git repositories and resolves every worktree with git worktree list."
                 />
             {:else if filteredProjects.length === 0}
-                <EmptyState
-                    icon="search"
-                    title={`No projects match “${filterQuery.trim()}”.`}
-                    text="The filter checks project name, paths, branches and states."
-                />
+                {#if filterQuery}
+                    <EmptyState
+                        icon="search"
+                        title={`No projects match “${filterQuery.trim()}”.`}
+                        text="The filter checks project name, paths, branches and states."
+                    />
+                {:else}
+                    <EmptyState
+                        icon="filter"
+                        title="No active projects."
+                        text="No project has uncommitted changes, upstream differences, or linked worktrees."
+                    />
+                {/if}
             {:else}
                 <div class="project-list">
                     {#each filteredProjects as project (project.commonDir || project.name)}

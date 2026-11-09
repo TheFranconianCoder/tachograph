@@ -368,12 +368,13 @@ outside the selection are kept, submodules are skipped, and the next snapshot re
 The diff is capped at 500 files and 256 KiB.
 
 Projects are listed in one column, newest change first. The filter above the list narrows by project
-name, path, branch or state. Inside a project the **project header is the main worktree**: it carries
-the main branch, snapshot age, timeline button and recorder state. Only the linked worktrees follow
-as rows, alphabetically by directory name. The dot at the left edge marks a dirty source worktree
-(uncommitted changes against `HEAD`). The dot at the end of every worktree row is the lifecycle
-signal: green = setup actions applied, red = setup failed, hollow = no lifecycle actions recorded
-(hover shows the details).
+name, path, branch or state. The **Active only** toggle keeps projects with uncommitted changes,
+upstream differences, or at least one linked worktree besides the main checkout. Inside a project
+the **project header is the main worktree**: it carries the main branch, snapshot age, timeline
+button and recorder state. Only the linked worktrees follow as rows, alphabetically by directory
+name. The dot at the left edge marks a dirty source worktree (uncommitted changes against `HEAD`).
+The dot at the end of every worktree row is the lifecycle signal: green = setup actions applied,
+red = setup failed, hollow = no lifecycle actions recorded (hover shows the details).
 
 Two copy buttons keep the paths reachable:
 

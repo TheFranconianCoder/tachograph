@@ -509,6 +509,12 @@ html[data-wco='1'] .connection {
     color: var(--muted);
 }
 
+.btn.active,
+.btn.active:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
 .btn--sm {
     height: 27px;
     padding: 0 9px;
