@@ -50,6 +50,9 @@ type ServerConfig struct {
 
 type UIConfig struct {
 	Open bool `yaml:"open"`
+	// ActiveOnly keeps only projects with relevant worktree state in the API
+	// and UI payload.
+	ActiveOnly bool `yaml:"activeOnly"`
 }
 
 type WatcherConfig struct {

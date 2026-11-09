@@ -29,6 +29,7 @@ type Status struct {
 	WorktreeSetup    WorktreeSetupStatus `json:"worktreeSetup"`
 	WorktreePatterns []string            `json:"worktreePatterns"`
 	Autostart        bool                `json:"autostart"`
+	ActiveOnly       bool                `json:"activeOnly"`
 	Roots            []string            `json:"roots"`
 	Projects         []ProjectStatus     `json:"projects"`
 	Activity         []Activity          `json:"activity"`
@@ -49,6 +50,7 @@ func (a *App) status() Status {
 		lastScan = a.lastScan.Format(time.RFC3339)
 	}
 	scanError := a.scanError
+	activeOnly := a.cfg.UI.ActiveOnly
 	a.mu.RUnlock()
 
 	recording := false
@@ -62,6 +64,12 @@ func (a *App) status() Status {
 		diffTool = a.historyStore.Diff.Name
 	}
 
+	projects := a.uiProjectsSnapshot()
+	activity := a.activitySnapshot()
+	if activeOnly {
+		activity = visibleActivity(activity, projects)
+	}
+
 	return Status{
 		Name:             "Tachograph",
 		Version:          version.String(),
@@ -73,9 +81,10 @@ func (a *App) status() Status {
 		WorktreeSetup:    a.worktreeSetupStatus(),
 		WorktreePatterns: patterns,
 		Autostart:        a.autostartSnapshot(),
+		ActiveOnly:       activeOnly,
 		Roots:            roots,
-		Projects:         a.projectsSnapshot(),
-		Activity:         a.activitySnapshot(),
+		Projects:         projects,
+		Activity:         activity,
 		Scanning:         scanning,
 		LastScan:         lastScan,
 		ScanError:        scanError,
@@ -88,6 +97,7 @@ func (a *App) handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/status", a.handleStatus)
 	mux.HandleFunc("GET /api/v1/events", a.handleEvents)
 	mux.HandleFunc("GET /api/v1/projects", a.handleProjects)
+	mux.HandleFunc("PUT /api/v1/projects/active-only", a.handleActiveOnly)
 	mux.HandleFunc("GET /api/v1/activity", a.handleActivity)
 	mux.HandleFunc("GET /api/v1/timeline", a.handleTimeline)
 	mux.HandleFunc("GET /api/v1/snapshot", a.handleSnapshot)
@@ -122,11 +132,45 @@ func (a *App) handleStatus(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (a *App) handleProjects(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, a.projectsSnapshot())
+	writeJSON(w, http.StatusOK, a.uiProjectsSnapshot())
+}
+
+type activeOnlyRequest struct {
+	Enabled bool `json:"enabled"`
+}
+
+func (a *App) handleActiveOnly(w http.ResponseWriter, r *http.Request) {
+	var request activeOnlyRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	a.mu.Lock()
+	cfg := a.cfg
+	cfg.UI.ActiveOnly = request.Enabled
+	if err := SaveConfig(a.cfgPath, cfg); err != nil {
+		a.mu.Unlock()
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.cfg = cfg
+	a.mu.Unlock()
+
+	// Enabling the filter can expose projects whose dirty or upstream state is
+	// not known yet; wake the source check so the next payload is accurate.
+	a.dirty.wakeUp()
+	a.notifyStatus()
+	writeJSON(w, http.StatusOK, map[string]bool{"activeOnly": request.Enabled})
 }
 
 func (a *App) handleActivity(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, a.activitySnapshot())
+	projects := a.uiProjectsSnapshot()
+	activity := a.activitySnapshot()
+	if a.activeOnlyFilter() {
+		activity = visibleActivity(activity, projects)
+	}
+	writeJSON(w, http.StatusOK, activity)
 }
 
 func (a *App) handleRootsList(w http.ResponseWriter, _ *http.Request) {

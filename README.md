@@ -177,7 +177,8 @@ curl http://127.0.0.1:9211/api/v1/projects
 ```
 
 `GET /api/v1/status` includes roots, projects, worktrees, scan state and errors. Removing a root uses
-`DELETE /api/v1/roots` with the same `{"path": ...}` body.
+`DELETE /api/v1/roots` with the same `{"path": ...}` body. The project payload honors the persisted
+Active only filter; `PUT /api/v1/projects/active-only` with `{"enabled": true}` or `false` changes it.
 
 ### Worktree setup
 
@@ -369,12 +370,14 @@ The diff is capped at 500 files and 256 KiB.
 
 Projects are listed in one column, newest change first. The filter above the list narrows by project
 name, path, branch or state. The **Active only** toggle keeps projects with uncommitted changes,
-upstream differences, or at least one linked worktree besides the main checkout. Inside a project
-the **project header is the main worktree**: it carries the main branch, snapshot age, timeline
-button and recorder state. Only the linked worktrees follow as rows, alphabetically by directory
-name. The dot at the left edge marks a dirty source worktree (uncommitted changes against `HEAD`).
-The dot at the end of every worktree row is the lifecycle signal: green = setup actions applied,
-red = setup failed, hollow = no lifecycle actions recorded (hover shows the details).
+upstream differences, or at least one linked worktree besides the main checkout. The service stores
+the choice as `ui.activeOnly` and applies it before the status payload is sent, so inactive projects
+never reach the UI. The activity list follows the same filter. Inside a project the **project header
+is the main worktree**: it carries the main branch, snapshot age, timeline button and recorder state.
+Only the linked worktrees follow as rows, alphabetically by directory name. The dot at the left edge
+marks a dirty source worktree (uncommitted changes against `HEAD`). The dot at the end of every
+worktree row is the lifecycle signal: green = setup actions applied, red = setup failed, hollow = no
+lifecycle actions recorded (hover shows the details).
 
 Two copy buttons keep the paths reachable:
 
@@ -465,6 +468,7 @@ server:
   port: 9211
 ui:
   open: true
+  activeOnly: false
 autostart: false
 watcher:
   engine: auto

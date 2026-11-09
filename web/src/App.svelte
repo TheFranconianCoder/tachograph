@@ -16,14 +16,13 @@
     import { currentRoute, navigate, startRouter, timelineURL } from './lib/router';
     import { claimAsPrimary, claimWindow, focusPrimaryWindow } from './lib/single-window';
     import type { Route } from './lib/router';
-    import type { ConnectionState, Project, Status, Worktree } from './lib/types';
+    import type { ConnectionState, Status, Worktree } from './lib/types';
 
     let status = $state<Status | null>(null);
     let actionError = $state<string | null>(null);
     let rootInput = $state('');
     let patternInput = $state('');
     let filterQuery = $state('');
-    let activeOnly = $state(false);
     let busy = $state(false);
     let copiedPath = $state<string | null>(null);
     let now = $state(Date.now());
@@ -101,6 +100,7 @@
     const roots = $derived(status?.roots ?? []);
     const projects = $derived(status?.projects ?? []);
     const activities = $derived(status?.activity ?? []);
+    const activeOnly = $derived(status?.activeOnly ?? false);
     const worktreeCount = $derived(projects.reduce((sum, project) => sum + project.worktrees.length, 0));
     const totalSnapshots = $derived(
         projects.reduce(
@@ -179,23 +179,10 @@
         navigate('/', true);
     }
 
-    // Active projects have uncommitted changes, upstream differences, or at
-    // least one linked worktree besides the main checkout.
-    function isActiveProject(project: Project): boolean {
-        return project.worktrees.some(
-            worktree =>
-                (worktree.dirty ?? false) ||
-                (worktree.ahead ?? 0) > 0 ||
-                (worktree.behind ?? 0) > 0 ||
-                worktree.path !== project.mainWorktree
-        );
-    }
-
     const filteredProjects = $derived.by(() => {
         const query = filterQuery.trim().toLowerCase();
-        const visible = activeOnly ? projects.filter(isActiveProject) : projects;
-        if (!query) return visible;
-        return visible.filter(project => {
+        if (!query) return projects;
+        return projects.filter(project => {
             const haystack = [
                 project.name,
                 project.commonDir,
@@ -313,6 +300,23 @@
         } catch (cause) {
             actionError =
                 cause instanceof Error ? cause.message : 'could not change autostart';
+        } finally {
+            busy = false;
+        }
+    }
+
+    async function toggleActiveOnly(): Promise<void> {
+        if (busy) return;
+        busy = true;
+        actionError = null;
+        try {
+            await request('/api/v1/projects/active-only', {
+                method: 'PUT',
+                body: JSON.stringify({ enabled: !activeOnly }),
+            });
+        } catch (cause) {
+            actionError =
+                cause instanceof Error ? cause.message : 'could not change the project filter';
         } finally {
             busy = false;
         }
@@ -460,7 +464,7 @@
                 <div class="head-row">
                     <h2>Projects</h2>
                     <span class="count">
-                        {filteredProjects.length} of {projects.length} · {worktreeCount} worktrees
+                        {filteredProjects.length}{#if filterQuery} of {projects.length}{/if} · {worktreeCount} worktrees
                     </span>
                     <span class="spacer"></span>
                     <button
@@ -468,20 +472,18 @@
                         class="btn btn--ghost btn--sm"
                         class:active={activeOnly}
                         aria-pressed={activeOnly}
+                        disabled={busy}
                         title="Show only projects with uncommitted changes, upstream differences, or linked worktrees"
-                        onclick={() => (activeOnly = !activeOnly)}
+                        onclick={toggleActiveOnly}
                     >
                         <Icon name="filter" size={14} />
                         Active only
                     </button>
-                    {#if filterQuery || activeOnly}
+                    {#if filterQuery}
                         <button
                             type="button"
                             class="btn btn--ghost btn--sm"
-                            onclick={() => {
-                                filterQuery = '';
-                                activeOnly = false;
-                            }}
+                            onclick={() => (filterQuery = '')}
                         >
                             <Icon name="close" size={14} />
                             Clear
@@ -501,25 +503,25 @@
             </div>
 
             {#if projects.length === 0}
-                <EmptyState
-                    icon="layers"
-                    title="No projects discovered yet."
-                    text="Add a root above and run a scan. Tachograph looks for Git repositories and resolves every worktree with git worktree list."
-                />
-            {:else if filteredProjects.length === 0}
-                {#if filterQuery}
-                    <EmptyState
-                        icon="search"
-                        title={`No projects match “${filterQuery.trim()}”.`}
-                        text="The filter checks project name, paths, branches and states."
-                    />
-                {:else}
+                {#if activeOnly}
                     <EmptyState
                         icon="filter"
                         title="No active projects."
                         text="No project has uncommitted changes, upstream differences, or linked worktrees."
                     />
+                {:else}
+                    <EmptyState
+                        icon="layers"
+                        title="No projects discovered yet."
+                        text="Add a root above and run a scan. Tachograph looks for Git repositories and resolves every worktree with git worktree list."
+                    />
                 {/if}
+            {:else if filteredProjects.length === 0}
+                <EmptyState
+                    icon="search"
+                    title={`No projects match “${filterQuery.trim()}”.`}
+                    text="The filter checks project name, paths, branches and states."
+                />
             {:else}
                 <div class="project-list">
                     {#each filteredProjects as project (project.commonDir || project.name)}

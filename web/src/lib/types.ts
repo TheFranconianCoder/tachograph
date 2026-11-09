@@ -73,6 +73,7 @@ export interface Status {
     worktreeSetup?: WorktreeSetup;
     worktreePatterns?: string[];
     autostart?: boolean;
+    activeOnly: boolean;
     roots: string[];
     projects: Project[];
     activity: Activity[];

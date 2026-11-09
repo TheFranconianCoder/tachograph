@@ -2,6 +2,9 @@ server:
   port: 9211
 ui:
   open: true
+  # Keep only projects with uncommitted changes, upstream differences, or
+  # linked worktrees in the API and UI payload.
+  activeOnly: false
 # Check and refresh a per-user login entry on every start. It starts the app
 # without opening the UI; failures are logged and never keep the app from
 # running.

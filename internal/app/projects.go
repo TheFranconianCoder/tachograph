@@ -127,6 +127,62 @@ func (a *App) projectsSnapshot() []ProjectStatus {
 	return projects
 }
 
+// uiProjectsSnapshot is the project list the UI receives. When the Active only
+// filter is enabled, projects without relevant worktree state are left out of
+// the payload entirely instead of being hidden client-side.
+func (a *App) uiProjectsSnapshot() []ProjectStatus {
+	projects := a.projectsSnapshot()
+	if !a.activeOnlyFilter() {
+		return projects
+	}
+	filtered := make([]ProjectStatus, 0, len(projects))
+	for _, project := range projects {
+		if activeProject(project) {
+			filtered = append(filtered, project)
+		}
+	}
+	return filtered
+}
+
+func (a *App) activeOnlyFilter() bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.cfg.UI.ActiveOnly
+}
+
+// activeProject reports whether a project has uncommitted changes, upstream
+// differences, or at least one linked worktree besides the main checkout.
+func activeProject(project ProjectStatus) bool {
+	for _, worktree := range project.Worktrees {
+		if worktree.Dirty || worktree.Ahead > 0 || worktree.Behind > 0 {
+			return true
+		}
+		if !samePath(worktree.Path, project.MainWorktree) {
+			return true
+		}
+	}
+	return false
+}
+
+// visibleActivity drops recorder events for worktrees that the Active only
+// filter keeps out of the payload. Entries without a path are global messages
+// and stay.
+func visibleActivity(activity []Activity, projects []ProjectStatus) []Activity {
+	visible := make(map[string]bool)
+	for _, project := range projects {
+		for _, worktree := range project.Worktrees {
+			visible[filepath.Clean(worktree.Path)] = true
+		}
+	}
+	filtered := make([]Activity, 0, len(activity))
+	for _, entry := range activity {
+		if entry.Path == "" || visible[filepath.Clean(entry.Path)] {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
 // worktreeStats returns the newest cumulative diffstats per worktree. The
 // activity map already holds exactly the values shown in the activity table.
 func (a *App) worktreeStats() map[string]*history.ChangeStats {
