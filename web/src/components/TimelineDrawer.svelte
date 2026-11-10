@@ -3,7 +3,7 @@
     import Icon from './ui/Icon.svelte';
     import { parseAnsiLine } from '../lib/ansi';
     import type { AnsiToken } from '../lib/ansi';
-    import { absoluteTime, baseName, relativeTime } from '../lib/format';
+    import { absoluteTime, relativeTime } from '../lib/format';
     import { confirm } from '../lib/confirm.svelte';
     import {
         fetchRange,
@@ -19,6 +19,7 @@
 
     interface Props {
         worktree: Worktree;
+        projectName: string;
         selectedHash: string | null;
         selectedFrom: string | null;
         selectedFiles: string[];
@@ -32,6 +33,7 @@
 
     const {
         worktree,
+        projectName,
         selectedHash,
         selectedFrom,
         selectedFiles,
@@ -438,12 +440,12 @@
 
 <div class="drawer-backdrop" role="presentation" onclick={onClose}></div>
 
-<div class="drawer" role="dialog" aria-modal="true" aria-label="Worktree timeline">
+<div class="drawer" role="dialog" aria-modal="true" aria-label="Project timeline">
     <header class="drawer-head">
         <div class="drawer-title">
             <h2>Timeline</h2>
             <p class="drawer-sub mono truncate" title={worktreePath}>
-                {baseName(worktreePath)} · {worktree.branch}
+                {projectName || '—'} · {worktree.branch}
             </p>
         </div>
         <button type="button" class="icon-btn" aria-label="Close timeline" onclick={onClose}>

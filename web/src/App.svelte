@@ -121,15 +121,19 @@
 
     // The API already orders projects and worktrees by newest snapshot; the
     // filter only narrows the list and keeps that order.
-    const timelineWorktree = $derived.by((): Worktree | null => {
+    const timelineTarget = $derived.by((): { worktree: Worktree; project: string } | null => {
         if (route.name !== 'timeline') return null;
         for (const project of projects) {
             for (const worktree of project.worktrees) {
-                if (worktree.id === route.worktreeID) return worktree;
+                if (worktree.id === route.worktreeID) {
+                    return { worktree, project: project.name };
+                }
             }
         }
         return null;
     });
+    const timelineWorktree = $derived(timelineTarget?.worktree ?? null);
+    const timelineProject = $derived(timelineTarget?.project ?? '');
 
     const worktreeIDs = $derived.by(() => {
         const ids = new Map<string, string>();
@@ -139,6 +143,26 @@
             }
         }
         return ids;
+    });
+
+    const worktreeProjects = $derived.by(() => {
+        const names = new Map<string, string>();
+        for (const project of projects) {
+            for (const worktree of project.worktrees) {
+                names.set(worktree.path, project.name);
+            }
+        }
+        return names;
+    });
+
+    const worktreeBranches = $derived.by(() => {
+        const branches = new Map<string, string>();
+        for (const project of projects) {
+            for (const worktree of project.worktrees) {
+                branches.set(worktree.path, worktree.branch);
+            }
+        }
+        return branches;
     });
 
     function openTimeline(worktree: Worktree): void {
@@ -454,6 +478,8 @@
                     {activities}
                     {now}
                     {worktreeIDs}
+                    {worktreeProjects}
+                    {worktreeBranches}
                     onOpenTimeline={openActivityTimeline}
                 />
             {/if}
@@ -589,6 +615,7 @@
         {#key timelineWorktree.path}
             <TimelineDrawer
                 worktree={timelineWorktree}
+                projectName={timelineProject}
                 selectedHash={route.name === 'timeline' ? route.hash : null}
                 selectedFrom={route.name === 'timeline' ? route.from : null}
                 selectedFiles={route.name === 'timeline' ? route.files : []}

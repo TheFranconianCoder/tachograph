@@ -1153,8 +1153,12 @@ details[open] > summary .panel-caret {
     width: 6rem;
 }
 
-/* The worktree text fills the row up to the right-aligned details. */
-.activity-col-worktree {
+.activity-col-project {
+    width: 9rem;
+}
+
+/* The branch text fills the row up to the right-aligned details. */
+.activity-col-branch {
     width: auto;
 }
 
@@ -1162,7 +1166,7 @@ details[open] > summary .panel-caret {
     width: 15rem;
 }
 
-.activity-table th:nth-child(4) {
+.activity-table th:nth-child(5) {
     text-align: right;
 }
 
@@ -1179,19 +1183,19 @@ details[open] > summary .panel-caret {
     padding: 8px 12px;
 }
 
-.activity-worktree-cell {
+.activity-branch-cell {
     display: block;
 }
 
 /* Details never truncate: the shortened hash and counts always stay
- * visible, while only the worktree name gets an ellipsis. */
+ * visible, while only the branch name gets an ellipsis. */
 .activity-details {
     color: var(--ink-2);
     text-align: right;
     white-space: nowrap;
 }
 
-.activity-worktree {
+.activity-branch {
     display: inline-block;
     max-width: 100%;
     overflow: hidden;
@@ -1207,11 +1211,11 @@ details[open] > summary .panel-caret {
     cursor: pointer;
 }
 
-.activity-worktree:hover {
+.activity-branch:hover {
     color: var(--accent);
 }
 
-.activity-worktree:focus-visible {
+.activity-branch:focus-visible {
     border-radius: 3px;
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -1257,7 +1261,7 @@ details[open] > summary .panel-caret {
 }
 
 @media (max-width: 760px) {
-    .activity-col-worktree {
+    .activity-col-branch {
         width: auto;
     }
 
@@ -1265,8 +1269,7 @@ details[open] > summary .panel-caret {
         width: 0;
     }
 
-    .activity-table th:nth-child(4),
-    .activity-table td:nth-child(4) {
+    .activity-table th:nth-child(5) {
         display: none;
     }
 
@@ -1276,6 +1279,10 @@ details[open] > summary .panel-caret {
 
     .activity-col-kind {
         width: 5.5rem;
+    }
+
+    .activity-col-project {
+        width: 7rem;
     }
 }
 
