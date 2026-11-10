@@ -19,6 +19,18 @@ const (
 	ModeDelta = "delta"
 )
 
+// DefaultTabWidth is the number of spaces a tab occupies in a rendered diff.
+const DefaultTabWidth = 4
+
+// NormalizeTabWidth returns width when it is positive and DefaultTabWidth
+// otherwise.
+func NormalizeTabWidth(width int) int {
+	if width > 0 {
+		return width
+	}
+	return DefaultTabWidth
+}
+
 var (
 	deltaNames = []string{"delta", "git-delta"}
 	difftNames = []string{"difft", "difftastic"}

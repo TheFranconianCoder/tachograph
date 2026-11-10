@@ -308,6 +308,7 @@ func (s *Store) RecorderFromKnown(known KnownWorktree) *Recorder {
 		HistoryRepo:    filepath.Join(s.Root, known.ProjectDir, "repo"),
 		Placeholder:    filepath.Join(s.Root, known.ProjectDir, "worktrees", known.WorktreeDir),
 		Diff:           s.Diff,
+		DiffTabWidth:   s.DiffTabWidth,
 		lock:           s.repoLock(known.ProjectDir),
 		worktreeGitDir: gitDirForWorktree(known.Path),
 	}

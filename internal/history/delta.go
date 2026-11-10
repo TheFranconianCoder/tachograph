@@ -5,14 +5,17 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
+
+	"github.com/TheFranconianCoder/tachograph/internal/difft"
 )
 
 // runDelta pipes a unified diff through delta and returns its ANSI output. The
 // render is deterministic: the user's gitconfig is ignored, paging is off and
 // the theme comes from the UI request.
-func runDelta(ctx context.Context, binary, input, theme string) (string, error) {
-	command := exec.CommandContext(ctx, binary, deltaArgs(theme)...)
+func runDelta(ctx context.Context, binary, input, theme string, tabWidth int) (string, error) {
+	command := exec.CommandContext(ctx, binary, deltaArgs(theme, tabWidth)...)
 	command.Stdin = strings.NewReader(input)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
@@ -26,13 +29,14 @@ func runDelta(ctx context.Context, binary, input, theme string) (string, error) 
 // deltaArgs keeps delta's colors close to the UI palette: soft change
 // backgrounds, themed syntax highlighting, muted chrome and app accent colors
 // for the file header.
-func deltaArgs(theme string) []string {
+func deltaArgs(theme string, tabWidth int) []string {
 	args := []string{
 		"--paging=never",
 		"--line-numbers",
 		"--no-gitconfig",
 		"--width=160",
 		"--true-color=always",
+		"--tabs=" + strconv.Itoa(difft.NormalizeTabWidth(tabWidth)),
 	}
 	if normalizeDiffTheme(theme) == "light" {
 		return append(args,

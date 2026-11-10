@@ -101,6 +101,7 @@ func New(cfg Config, cfgPath string, opts Options, log *slog.Logger) (*App, erro
 
 	historyStore := history.New(historyRoot)
 	historyStore.Diff = difft.Resolve(cfg.Diff.Tool, cfg.Diff.Path)
+	historyStore.DiffTabWidth = cfg.Diff.TabWidth
 	lastActive, persistedActivity := loadActivityState(log)
 	if historyStore.Diff.Enabled() {
 		log.Info("diff renderer enabled", "tool", historyStore.Diff.Name, "binary", historyStore.Diff.Path)

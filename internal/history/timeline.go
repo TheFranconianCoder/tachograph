@@ -598,6 +598,7 @@ func (r *Recorder) diffBetween(ctx context.Context, from, to string, files []str
 		}
 	}
 	theme := diffTheme(ctx)
+	tabWidth := difft.NormalizeTabWidth(r.DiffTabWidth)
 
 	if r.Diff.Enabled() {
 		switch r.Diff.Name {
@@ -610,12 +611,12 @@ func (r *Recorder) diffBetween(ctx context.Context, from, to string, files []str
 			diff, err := runGit(ctx, r.Placeholder, args...)
 			if err == nil {
 				if text := strings.TrimSpace(diff); text != "" {
-					rendered, renderErr := runDelta(ctx, r.Diff.Path, text, theme)
+					rendered, renderErr := runDelta(ctx, r.Diff.Path, text, theme, tabWidth)
 					if renderErr == nil && strings.TrimSpace(rendered) != "" {
 						return rendered, "delta", nil
 					}
 				}
-				return diff, "git", nil
+				return expandDiffTabs(diff, tabWidth), "git", nil
 			}
 		default:
 			env := []string{
@@ -626,6 +627,7 @@ func (r *Recorder) diffBetween(ctx context.Context, from, to string, files []str
 				"DFT_CONTEXT=1",
 				"DFT_SYNTAX_HIGHLIGHT=on",
 				"DFT_BACKGROUND=" + theme,
+				"DFT_TAB_WIDTH=" + strconv.Itoa(tabWidth),
 			}
 			args := []string{
 				"diff", "--find-renames", "--unified=1", "--no-textconv",
@@ -650,7 +652,13 @@ func (r *Recorder) diffBetween(ctx context.Context, from, to string, files []str
 	if err != nil {
 		return "", "", fmt.Errorf("snapshot diff: %w", err)
 	}
-	return diff, "git", nil
+	return expandDiffTabs(diff, tabWidth), "git", nil
+}
+
+// expandDiffTabs replaces tabs with spaces in Git's unified diff, which has no
+// tab-width option of its own.
+func expandDiffTabs(diff string, tabWidth int) string {
+	return strings.ReplaceAll(diff, "\t", strings.Repeat(" ", difft.NormalizeTabWidth(tabWidth)))
 }
 
 // literalPathspec disables Git pathspec magic so a file name such as ":foo"

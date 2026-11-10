@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/TheFranconianCoder/tachograph/internal/difft"
 )
 
 func TestResolveWatcherForcedPoll(t *testing.T) {
@@ -80,6 +82,38 @@ func TestCompactionOptionsDefaultsAndClamping(t *testing.T) {
 	}
 	if clamped.MaxAge != 24*time.Hour {
 		t.Errorf("maxAge = %s, want it clamped to 24h", clamped.MaxAge)
+	}
+}
+
+func TestLoadConfigNormalizesDiffTabWidth(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Diff.TabWidth != difft.DefaultTabWidth {
+		t.Errorf("default tab width = %d, want %d", cfg.Diff.TabWidth, difft.DefaultTabWidth)
+	}
+
+	path := t.TempDir() + "/config.yaml"
+	cfg.Diff.TabWidth = 0
+	if err := SaveConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Diff.TabWidth != difft.DefaultTabWidth {
+		t.Errorf("zero tab width = %d, want %d", loaded.Diff.TabWidth, difft.DefaultTabWidth)
+	}
+
+	cfg.Diff.TabWidth = 2
+	if err := SaveConfig(path, cfg); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Diff.TabWidth != 2 {
+		t.Errorf("configured tab width = %d, want 2", loaded.Diff.TabWidth)
 	}
 }
 

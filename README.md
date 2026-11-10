@@ -87,7 +87,8 @@ diff. Delta adds syntax highlighting and line numbers, while difftastic shows st
 Their ANSI colors are preserved, and the renderer follows the UI's light/dark theme. Both are
 detected in PATH or a mise installation; `diff.tool` selects `auto` (delta, then difftastic), `git`,
 `delta` or `difft`, and `diff.path` points at a specific binary. Without them, the timeline shows
-Git's unified diff.
+Git's unified diff. Tabs render as four spaces by default; `diff.tabWidth` changes that for all
+three renderers.
 
 ```bash
 task build          # build the UI and the static binary

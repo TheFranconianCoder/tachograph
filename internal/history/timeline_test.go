@@ -339,11 +339,12 @@ func TestSnapshotDetailUsesDifftAndFallsBackToGit(t *testing.T) {
 	mustGit(t, project, "worktree", "add", "-b", "feature", worktree)
 
 	fake := filepath.Join(base, "difft")
-	script := "#!/bin/sh\nprintf 'CONTEXT=%s\\n' \"$DFT_CONTEXT\"\nprintf '\\033[91mSTRUCTURAL DIFF\\033[0m\\n'\n"
+	script := "#!/bin/sh\nprintf 'CONTEXT=%s\\n' \"$DFT_CONTEXT\"\nprintf 'TAB=%s\\n' \"$DFT_TAB_WIDTH\"\nprintf '\\033[91mSTRUCTURAL DIFF\\033[0m\\n'\n"
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	store.Diff = difft.Tool{Name: "difft", Path: fake}
+	store.DiffTabWidth = 6
 
 	recorder, err := store.Ensure(ctx, worktree)
 	if err != nil {
@@ -368,6 +369,9 @@ func TestSnapshotDetailUsesDifftAndFallsBackToGit(t *testing.T) {
 	if !strings.Contains(detail.Diff, "CONTEXT=1") {
 		t.Errorf("diff = %q, want DFT_CONTEXT=1", detail.Diff)
 	}
+	if !strings.Contains(detail.Diff, "TAB=6") {
+		t.Errorf("diff = %q, want DFT_TAB_WIDTH=6", detail.Diff)
+	}
 	if !strings.Contains(detail.Diff, "\x1b[91m") {
 		t.Errorf("diff = %q, want the ANSI colour codes preserved", detail.Diff)
 	}
@@ -384,6 +388,56 @@ func TestSnapshotDetailUsesDifftAndFallsBackToGit(t *testing.T) {
 	}
 	if !strings.Contains(fallback.Diff, "+one") {
 		t.Errorf("fallback diff = %q, want the git patch", fallback.Diff)
+	}
+}
+
+func TestGitDiffExpandsTabs(t *testing.T) {
+	ctx := t.Context()
+	base := t.TempDir()
+	project := filepath.Join(base, "project")
+	worktree := filepath.Join(base, "worktree")
+	store := New(filepath.Join(base, "history"))
+
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, project, "init", "-b", "main")
+	mustGit(t, project, "config", "user.name", "Test")
+	mustGit(t, project, "config", "user.email", "test@example.com")
+	mustGit(t, project, "config", "commit.gpgsign", "false")
+	writeFile(t, filepath.Join(project, "a.txt"), "\tbase\n")
+	mustGit(t, project, "add", "-A")
+	mustGit(t, project, "commit", "-m", "base")
+	mustGit(t, project, "worktree", "add", "-b", "feature", worktree)
+
+	recorder, err := store.Ensure(ctx, worktree)
+	if err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "a.txt"), "\tchanged\n")
+	snapshot, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	detail, err := recorder.SnapshotDetail(ctx, snapshot.Hash, "")
+	if err != nil {
+		t.Fatalf("SnapshotDetail: %v", err)
+	}
+	if strings.Contains(detail.Diff, "\t") {
+		t.Errorf("diff = %q, want tabs expanded", detail.Diff)
+	}
+	if !strings.Contains(detail.Diff, "+    changed") {
+		t.Errorf("diff = %q, want the default four-space tab width", detail.Diff)
+	}
+
+	recorder.DiffTabWidth = 2
+	detail, err = recorder.SnapshotDetail(ctx, snapshot.Hash, "")
+	if err != nil {
+		t.Fatalf("SnapshotDetail(tabWidth=2): %v", err)
+	}
+	if !strings.Contains(detail.Diff, "+  changed") {
+		t.Errorf("diff = %q, want the configured two-space tab width", detail.Diff)
 	}
 }
 

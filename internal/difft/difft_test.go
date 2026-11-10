@@ -7,6 +7,18 @@ import (
 	"testing"
 )
 
+func TestNormalizeTabWidth(t *testing.T) {
+	if got := NormalizeTabWidth(0); got != DefaultTabWidth {
+		t.Errorf("NormalizeTabWidth(0) = %d, want %d", got, DefaultTabWidth)
+	}
+	if got := NormalizeTabWidth(-2); got != DefaultTabWidth {
+		t.Errorf("NormalizeTabWidth(-2) = %d, want %d", got, DefaultTabWidth)
+	}
+	if got := NormalizeTabWidth(8); got != 8 {
+		t.Errorf("NormalizeTabWidth(8) = %d, want 8", got)
+	}
+}
+
 func TestResolve(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell script fixture")

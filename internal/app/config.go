@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TheFranconianCoder/tachograph/internal/difft"
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,6 +43,8 @@ type DiffConfig struct {
 	Tool string `yaml:"tool"`
 	// Path is an optional explicit binary for the selected renderer.
 	Path string `yaml:"path,omitempty"`
+	// TabWidth is the number of spaces a tab occupies in the rendered diff.
+	TabWidth int `yaml:"tabWidth"`
 }
 
 type ServerConfig struct {
@@ -137,7 +140,7 @@ func DefaultConfig() Config {
 			},
 		},
 		Worktrees: WorktreeConfig{OnCreate: defaultLifecycleActions(), Patterns: []string{}},
-		Diff:      DiffConfig{Tool: "auto"},
+		Diff:      DiffConfig{Tool: "auto", TabWidth: difft.DefaultTabWidth},
 		Autostart: false,
 		History: HistoryConfig{
 			Compaction: CompactionConfig{
@@ -254,6 +257,7 @@ func LoadConfig(path string) (Config, error) {
 		cfg.Diff.Tool = "auto"
 	}
 	cfg.Diff.Path = strings.TrimSpace(cfg.Diff.Path)
+	cfg.Diff.TabWidth = difft.NormalizeTabWidth(cfg.Diff.TabWidth)
 	if cfg.Roots == nil {
 		cfg.Roots = []string{}
 	}

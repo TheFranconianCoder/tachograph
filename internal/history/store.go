@@ -52,6 +52,8 @@ type Store struct {
 	Root string
 	// Diff selects the renderer for snapshot patches.
 	Diff difft.Tool
+	// DiffTabWidth is the number of spaces a tab occupies in rendered diffs.
+	DiffTabWidth int
 
 	mu    sync.Mutex
 	locks map[string]*sync.Mutex
@@ -113,11 +115,12 @@ type Worktree struct {
 
 // Recorder is the bound recorder for one worktree.
 type Recorder struct {
-	Project     Project
-	Worktree    Worktree
-	HistoryRepo string
-	Placeholder string
-	Diff        difft.Tool
+	Project      Project
+	Worktree     Worktree
+	HistoryRepo  string
+	Placeholder  string
+	Diff         difft.Tool
+	DiffTabWidth int
 
 	lock *sync.Mutex
 
@@ -264,6 +267,7 @@ func (s *Store) Ensure(ctx context.Context, worktreePath string) (*Recorder, err
 		HistoryRepo:    historyRepo,
 		Placeholder:    placeholder,
 		Diff:           s.Diff,
+		DiffTabWidth:   s.DiffTabWidth,
 		lock:           lock,
 		worktreeGitDir: gitDirForWorktree(worktreeRoot),
 	}

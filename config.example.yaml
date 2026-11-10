@@ -57,6 +57,9 @@ diff:
   # Optional explicit binary for the selected renderer; otherwise PATH and mise
   # are searched.
   # path: /home/you/.local/bin/delta
+  # Number of spaces a tab occupies in the rendered diff. Applies to delta,
+  # difftastic and the git fallback.
+  tabWidth: 4
 worktrees:
   # Globs for worktrees whose main repository is outside the roots.
   # Absolute paths or paths starting with ~; * ? [] are supported.

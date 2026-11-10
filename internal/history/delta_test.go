@@ -69,6 +69,7 @@ func TestDeltaRendering(t *testing.T) {
 		"--no-gitconfig",
 		"--width=160",
 		"--true-color=always",
+		"--tabs=4",
 		"--light",
 		`--plus-style syntax "#e8f3ec"`,
 		"DELTA COLOR",
@@ -79,12 +80,14 @@ func TestDeltaRendering(t *testing.T) {
 		}
 	}
 
+	recorder.DiffTabWidth = 8
 	dark, err := recorder.SnapshotDetail(WithDiffTheme(ctx, "dark"), snapshot.Hash, "")
 	if err != nil {
 		t.Fatalf("SnapshotDetail(delta, dark): %v", err)
 	}
 	for _, want := range []string{
 		"--dark",
+		"--tabs=8",
 		`--plus-style syntax "#132820"`,
 	} {
 		if !strings.Contains(dark.Diff, want) {
