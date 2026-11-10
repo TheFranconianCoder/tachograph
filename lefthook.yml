@@ -1,0 +1,9 @@
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    audit:
+      glob: "go.{mod,sum}"
+      run: task audit
+      stage_fixed: true

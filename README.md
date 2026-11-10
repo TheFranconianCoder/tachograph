@@ -94,7 +94,15 @@ three renderers.
 task build          # build the UI and the static binary
 task run            # tray + local service, opens the UI
 task run:headless   # service only, no tray, no browser
+task audit          # SBOM, vulnerability and license scan
+task hooks          # install the lefthook Git hooks
 ```
+
+`task audit` builds a CycloneDX SBOM with `syft`, scans it with `grype` (configured in
+`.grype.yaml`; fails on high and critical findings) and checks dependency licenses against
+`.grant.yaml` with `grant`. The tool versions are pinned in `mise.toml`; `mise install` provisions
+them. `task hooks` installs the pre-commit hook that runs the audit when `go.mod` or `go.sum`
+changes.
 
 The app listens on `127.0.0.1:9211` by default:
 

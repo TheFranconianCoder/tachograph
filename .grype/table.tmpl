@@ -1,0 +1,10 @@
+{{- printf "%-30s %-20s %-50s %-20s %-10s\n" "NAME" "INSTALLED" "FIXED VERSION" "VULNERABILITY" "SEVERITY" -}}
+{{- range .Matches -}}
+  {{- $sev := .Vulnerability.Severity -}}
+  {{- $fix := (.Vulnerability.Fix.Versions | join " ") }}
+  {{- if eq $sev "Critical" -}}
+    {{- printf "%-30s %-20s %-50s %-20s \033[38;5;198m%-10s\033[0m\n" .Artifact.Name .Artifact.Version $fix .Vulnerability.ID $sev -}}
+  {{- else if eq $sev "High" -}}
+    {{- printf "%-30s %-20s %-50s %-20s \033[38;5;203m%-10s\033[0m\n" .Artifact.Name .Artifact.Version $fix .Vulnerability.ID $sev -}}
+  {{- end -}}
+{{- end -}}

@@ -99,3 +99,15 @@ tasks:
   test:
     desc: Run the Go tests
     cmd: go test ./...
+
+  audit:
+    desc: Supply-chain scan (SBOM + vulnerabilities + licenses)
+    cmds:
+      - syft dir:. --exclude './.git/**' --exclude './dist/**' -o cyclonedx-json=sbom.json
+      - defer: rm -f sbom.json
+      - grype sbom.json
+      - grant check sbom.json
+
+  hooks:
+    desc: Install Git hooks via lefthook
+    cmd: lefthook install

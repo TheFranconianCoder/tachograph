@@ -1,0 +1,28 @@
+# .grant.yaml
+# Project license: MPL-2.0 (static builds / open source).
+
+allow:
+  # Permissive licenses, compatible with MPL-2.0.
+  - MIT
+  - Apache-2.0
+  - BSD-2-Clause
+  - BSD-3-Clause
+  - ISC
+  - 0BSD
+  - Unlicense
+  - CC0-1.0
+  - UPL-1.0
+  - Zlib
+  - BSL-1.0
+
+  # Bundled font (JetBrains Mono).
+  - OFL-1.1
+
+  # Same license as the project.
+  - MPL-2.0
+
+# Weak copyleft (EPL, LGPL, GPL, AGPL) is deliberately not allowed: it would
+# either put the combined work under another license or, for LGPL in statically
+# linked Go binaries, require relinkable object files.
+require-known-license: true
+ignore-packages: []

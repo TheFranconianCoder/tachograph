@@ -1,0 +1,4 @@
+output:
+  - template
+output-template-file: .grype/table.tmpl
+fail-on-severity: high
