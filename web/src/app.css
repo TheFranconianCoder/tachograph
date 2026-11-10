@@ -1145,6 +1145,10 @@ details[open] > summary .panel-caret {
     background: var(--bg-hover);
 }
 
+.activity-table tbody tr.clickable {
+    cursor: pointer;
+}
+
 .activity-col-time {
     width: 5.5rem;
 }
@@ -1209,10 +1213,6 @@ details[open] > summary .panel-caret {
     vertical-align: bottom;
     white-space: nowrap;
     cursor: pointer;
-}
-
-.activity-branch:hover {
-    color: var(--accent);
 }
 
 .activity-branch:focus-visible {

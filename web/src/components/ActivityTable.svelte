@@ -25,6 +25,10 @@
         worktreeBranches,
         onOpenTimeline,
     }: Props = $props();
+
+    function openEventTimeline(path: string | undefined): void {
+        if (path && worktreeIDs.has(path)) onOpenTimeline(path);
+    }
 </script>
 
 <div class="activity-table-wrap">
@@ -56,7 +60,13 @@
                     [event.stats ? changeTitle(event.stats) : '', event.hash]
                         .filter(Boolean)
                         .join(' · ')}
-                <tr>
+                <!-- The branch button provides keyboard access; the row click is
+                     a mouse convenience for the whole event. -->
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+                <tr
+                    class:clickable={path !== undefined && worktreeIDs.has(path)}
+                    onclick={() => openEventTimeline(path)}
+                >
                     <td class="mono muted" title={absoluteTime(event.time)}>
                         {relativeTime(event.time, now)}
                     </td>
@@ -77,7 +87,10 @@
                                         type="button"
                                         class="activity-branch"
                                         title={`Open history for ${path}`}
-                                        onclick={() => onOpenTimeline(path)}
+                                        onclick={event => {
+                                            event.stopPropagation();
+                                            onOpenTimeline(path);
+                                        }}
                                     >
                                         {branch ?? '—'}
                                     </button>
