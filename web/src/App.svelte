@@ -99,6 +99,9 @@
 
     const roots = $derived(status?.roots ?? []);
     const projects = $derived(status?.projects ?? []);
+    // The worktree index also covers projects hidden by Active only, so
+    // activity rows keep their project and branch labels.
+    const worktrees = $derived(status?.worktrees ?? []);
     const activities = $derived(status?.activity ?? []);
     const activeOnly = $derived(status?.activeOnly ?? false);
     const worktreeCount = $derived(projects.reduce((sum, project) => sum + project.worktrees.length, 0));
@@ -123,44 +126,53 @@
     // filter only narrows the list and keeps that order.
     const timelineTarget = $derived.by((): { worktree: Worktree; project: string } | null => {
         if (route.name !== 'timeline') return null;
+        const worktreeID = route.worktreeID;
         for (const project of projects) {
             for (const worktree of project.worktrees) {
-                if (worktree.id === route.worktreeID) {
+                if (worktree.id === worktreeID) {
                     return { worktree, project: project.name };
                 }
             }
         }
-        return null;
+        // Active only may hide the project from the list, but its activity
+        // rows still open the timeline through the unfiltered worktree index.
+        const ref = worktrees.find(worktree => worktree.id === worktreeID);
+        if (!ref) return null;
+        return {
+            worktree: {
+                id: ref.id,
+                path: ref.path,
+                branch: ref.branch,
+                head: '',
+                state: 'ready',
+                snapshots: ref.snapshots,
+            },
+            project: ref.project,
+        };
     });
     const timelineWorktree = $derived(timelineTarget?.worktree ?? null);
     const timelineProject = $derived(timelineTarget?.project ?? '');
 
     const worktreeIDs = $derived.by(() => {
         const ids = new Map<string, string>();
-        for (const project of projects) {
-            for (const worktree of project.worktrees) {
-                if (worktree.id) ids.set(worktree.path, worktree.id);
-            }
+        for (const worktree of worktrees) {
+            if (worktree.id) ids.set(worktree.path, worktree.id);
         }
         return ids;
     });
 
     const worktreeProjects = $derived.by(() => {
         const names = new Map<string, string>();
-        for (const project of projects) {
-            for (const worktree of project.worktrees) {
-                names.set(worktree.path, project.name);
-            }
+        for (const worktree of worktrees) {
+            names.set(worktree.path, worktree.project);
         }
         return names;
     });
 
     const worktreeBranches = $derived.by(() => {
         const branches = new Map<string, string>();
-        for (const project of projects) {
-            for (const worktree of project.worktrees) {
-                branches.set(worktree.path, worktree.branch);
-            }
+        for (const worktree of worktrees) {
+            branches.set(worktree.path, worktree.branch);
         }
         return branches;
     });

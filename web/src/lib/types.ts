@@ -30,6 +30,15 @@ export interface Project {
     worktrees: Worktree[];
 }
 
+/** Compact worktree lookup that also covers projects hidden by Active only. */
+export interface WorktreeRef {
+    id?: string;
+    path: string;
+    project: string;
+    branch: string;
+    snapshots?: number;
+}
+
 export interface ChangeStats {
     files: number;
     added: number;
@@ -76,6 +85,7 @@ export interface Status {
     activeOnly: boolean;
     roots: string[];
     projects: Project[];
+    worktrees: WorktreeRef[];
     activity: Activity[];
     scanning: boolean;
     lastScan?: string;

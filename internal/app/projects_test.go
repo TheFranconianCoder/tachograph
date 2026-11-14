@@ -194,30 +194,7 @@ func TestHandleActiveOnlyPersistsConfig(t *testing.T) {
 	}
 }
 
-func TestVisibleActivityDropsHiddenWorktrees(t *testing.T) {
-	projects := []ProjectStatus{{
-		MainWorktree: "/visible",
-		Worktrees:    []WorktreeStatus{{Path: "/visible"}},
-	}}
-	activity := []Activity{
-		{Kind: "snapshot", Path: "/visible"},
-		{Kind: "snapshot", Path: "/hidden"},
-		{Kind: "error", Message: "global"},
-	}
-
-	filtered := visibleActivity(activity, projects)
-	if len(filtered) != 2 {
-		t.Fatalf("visibleActivity() = %d entries, want 2", len(filtered))
-	}
-	if filtered[0].Path != "/visible" {
-		t.Errorf("first entry path = %q, want /visible", filtered[0].Path)
-	}
-	if filtered[1].Path != "" || filtered[1].Message != "global" {
-		t.Errorf("global entry = %+v, want the pathless message", filtered[1])
-	}
-}
-
-func TestStatusAppliesActiveOnlyToProjectsAndActivity(t *testing.T) {
+func TestStatusAppliesActiveOnlyToProjectsOnly(t *testing.T) {
 	a := &App{
 		cfg: Config{UI: UIConfig{ActiveOnly: true}},
 		projects: []ProjectStatus{
@@ -242,7 +219,24 @@ func TestStatusAppliesActiveOnlyToProjectsAndActivity(t *testing.T) {
 	if len(status.Projects) != 1 || status.Projects[0].Name != "linked" {
 		t.Errorf("status.Projects = %+v, want only linked", status.Projects)
 	}
-	if len(status.Activity) != 1 || status.Activity[0].Path != "/linked" {
-		t.Errorf("status.Activity = %+v, want only /linked", status.Activity)
+	if len(status.Activity) != 2 {
+		t.Fatalf("status.Activity = %+v, want every worktree", status.Activity)
+	}
+	paths := map[string]bool{}
+	for _, entry := range status.Activity {
+		paths[entry.Path] = true
+	}
+	if !paths["/quiet"] || !paths["/linked"] {
+		t.Errorf("status.Activity paths = %v, want /quiet and /linked", paths)
+	}
+	if len(status.Worktrees) != 3 {
+		t.Fatalf("status.Worktrees = %+v, want every worktree", status.Worktrees)
+	}
+	refs := map[string]string{}
+	for _, ref := range status.Worktrees {
+		refs[ref.Path] = ref.Project
+	}
+	if refs["/quiet"] != "quiet" || refs["/linked"] != "linked" || refs["/linked-feature"] != "linked" {
+		t.Errorf("status.Worktrees = %v, want all worktrees with their projects", refs)
 	}
 }

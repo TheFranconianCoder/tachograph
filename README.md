@@ -188,6 +188,8 @@ curl http://127.0.0.1:9211/api/v1/projects
 `GET /api/v1/status` includes roots, projects, worktrees, scan state and errors. Removing a root uses
 `DELETE /api/v1/roots` with the same `{"path": ...}` body. The project payload honors the persisted
 Active only filter; `PUT /api/v1/projects/active-only` with `{"enabled": true}` or `false` changes it.
+The status payload also carries an unfiltered worktree index, so the activity table can still label
+and open rows for projects the filter hides.
 
 ### Worktree setup
 
@@ -381,8 +383,9 @@ Projects are listed in one column, newest change first. The filter above the lis
 name, path, branch or state. The **Active only** toggle keeps projects with uncommitted changes,
 upstream differences, or at least one linked worktree besides the main checkout. The service stores
 the choice as `ui.activeOnly` and applies it before the status payload is sent, so inactive projects
-never reach the UI. The activity list follows the same filter. Inside a project the **project header
-is the main worktree**: it carries the main branch, snapshot age, timeline button and recorder state.
+never reach the project list. The activity list is not filtered and keeps every worktree. Inside a
+project the **project header is the main worktree**: it carries the main branch, snapshot age,
+timeline button and recorder state.
 Only the linked worktrees follow as rows, alphabetically by directory name. The dot at the left edge
 marks a dirty source worktree (uncommitted changes against `HEAD`). The dot at the end of every
 worktree row is the lifecycle signal: green = setup actions applied, red = setup failed, hollow = no

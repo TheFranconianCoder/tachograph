@@ -17,6 +17,16 @@ import (
 	"github.com/TheFranconianCoder/tachograph/internal/web"
 )
 
+// WorktreeRef is the compact worktree metadata the UI needs to label activity
+// rows and open their timelines.
+type WorktreeRef struct {
+	ID        string `json:"id,omitempty"`
+	Path      string `json:"path"`
+	Project   string `json:"project"`
+	Branch    string `json:"branch"`
+	Snapshots int    `json:"snapshots,omitempty"`
+}
+
 // Status is the public, read-only view of the app.
 type Status struct {
 	Name             string              `json:"name"`
@@ -32,10 +42,14 @@ type Status struct {
 	ActiveOnly       bool                `json:"activeOnly"`
 	Roots            []string            `json:"roots"`
 	Projects         []ProjectStatus     `json:"projects"`
-	Activity         []Activity          `json:"activity"`
-	Scanning         bool                `json:"scanning"`
-	LastScan         string              `json:"lastScan,omitempty"`
-	ScanError        string              `json:"scanError,omitempty"`
+	// Worktrees covers every discovered worktree, including projects the Active
+	// only filter hides from Projects, so the activity table can still resolve
+	// project, branch and timeline links.
+	Worktrees []WorktreeRef `json:"worktrees"`
+	Activity  []Activity    `json:"activity"`
+	Scanning  bool          `json:"scanning"`
+	LastScan  string        `json:"lastScan,omitempty"`
+	ScanError string        `json:"scanError,omitempty"`
 }
 
 func (a *App) status() Status {
@@ -64,11 +78,12 @@ func (a *App) status() Status {
 		diffTool = a.historyStore.Diff.Name
 	}
 
-	projects := a.uiProjectsSnapshot()
-	activity := a.activitySnapshot()
+	allProjects := a.projectsSnapshot()
+	projects := allProjects
 	if activeOnly {
-		activity = visibleActivity(activity, projects)
+		projects = filterActiveProjects(allProjects)
 	}
+	activity := a.activitySnapshot()
 
 	return Status{
 		Name:             "Tachograph",
@@ -84,6 +99,7 @@ func (a *App) status() Status {
 		ActiveOnly:       activeOnly,
 		Roots:            roots,
 		Projects:         projects,
+		Worktrees:        worktreeRefs(allProjects),
 		Activity:         activity,
 		Scanning:         scanning,
 		LastScan:         lastScan,
@@ -165,12 +181,7 @@ func (a *App) handleActiveOnly(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleActivity(w http.ResponseWriter, _ *http.Request) {
-	projects := a.uiProjectsSnapshot()
-	activity := a.activitySnapshot()
-	if a.activeOnlyFilter() {
-		activity = visibleActivity(activity, projects)
-	}
-	writeJSON(w, http.StatusOK, activity)
+	writeJSON(w, http.StatusOK, a.activitySnapshot())
 }
 
 func (a *App) handleRootsList(w http.ResponseWriter, _ *http.Request) {

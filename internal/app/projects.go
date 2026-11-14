@@ -135,6 +135,10 @@ func (a *App) uiProjectsSnapshot() []ProjectStatus {
 	if !a.activeOnlyFilter() {
 		return projects
 	}
+	return filterActiveProjects(projects)
+}
+
+func filterActiveProjects(projects []ProjectStatus) []ProjectStatus {
 	filtered := make([]ProjectStatus, 0, len(projects))
 	for _, project := range projects {
 		if activeProject(project) {
@@ -142,6 +146,25 @@ func (a *App) uiProjectsSnapshot() []ProjectStatus {
 		}
 	}
 	return filtered
+}
+
+// worktreeRefs flattens all discovered worktrees for the activity table. It
+// uses the unfiltered project list so hidden projects can still label their
+// activity rows.
+func worktreeRefs(projects []ProjectStatus) []WorktreeRef {
+	refs := make([]WorktreeRef, 0)
+	for _, project := range projects {
+		for _, worktree := range project.Worktrees {
+			refs = append(refs, WorktreeRef{
+				ID:        worktree.ID,
+				Path:      worktree.Path,
+				Project:   project.Name,
+				Branch:    worktree.Branch,
+				Snapshots: worktree.Snapshots,
+			})
+		}
+	}
+	return refs
 }
 
 func (a *App) activeOnlyFilter() bool {
@@ -162,25 +185,6 @@ func activeProject(project ProjectStatus) bool {
 		}
 	}
 	return false
-}
-
-// visibleActivity drops recorder events for worktrees that the Active only
-// filter keeps out of the payload. Entries without a path are global messages
-// and stay.
-func visibleActivity(activity []Activity, projects []ProjectStatus) []Activity {
-	visible := make(map[string]bool)
-	for _, project := range projects {
-		for _, worktree := range project.Worktrees {
-			visible[filepath.Clean(worktree.Path)] = true
-		}
-	}
-	filtered := make([]Activity, 0, len(activity))
-	for _, entry := range activity {
-		if entry.Path == "" || visible[filepath.Clean(entry.Path)] {
-			filtered = append(filtered, entry)
-		}
-	}
-	return filtered
 }
 
 // worktreeStats returns the newest cumulative diffstats per worktree. The
