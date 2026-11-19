@@ -131,9 +131,11 @@ func (r *Recorder) Timeline(ctx context.Context, limit, offset int, file string)
 
 // timelineLowerBound returns the newest commit that should stay out of the
 // timeline. The root is always a state, not a change: the initialization
-// commit, an archive root, or the first source copy. For linked worktrees the
-// explicit initialization ref is authoritative; legacy stores fall back to the
-// leading run of addition-only snapshots.
+// commit or the first source copy. For linked worktrees the explicit
+// initialization ref is authoritative; legacy stores fall back to the leading
+// run of addition-only snapshots below a base root. An archive root is a
+// retained historical state, not an initialization marker: hiding commits
+// below it would make real changes disappear after a compaction.
 func (r *Recorder) timelineLowerBound(ctx context.Context) string {
 	// The project's main branch is the source of truth. Show its complete
 	// history, including the initialization state and the first copy.
@@ -152,15 +154,13 @@ func (r *Recorder) timelineLowerBound(ctx context.Context) string {
 	if err != nil {
 		return ""
 	}
-
-	lower := root
-	if !strings.HasPrefix(subject, "base:") &&
-		!(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, root)) {
-		return lower
+	if !strings.HasPrefix(subject, "base:") {
+		return ""
 	}
+
 	first := r.firstCommitAfter(ctx, root)
 	if first == "" {
-		return lower
+		return root
 	}
 	return r.legacyInitializationBound(ctx, root, first)
 }
@@ -237,7 +237,9 @@ func (r *Recorder) onlyAddedBetween(ctx context.Context, from, to string) bool {
 
 // BackfillInitialization records the legacy initialization boundary as a ref.
 // It makes the first timeline read after an upgrade cheap and keeps the result
-// stable. The prefix must be old enough that it cannot still be growing.
+// stable. The prefix must be old enough that it cannot still be growing. Only a
+// base root marks a legacy store; an archive root is a retained state and says
+// nothing about where the initialization ended.
 func (r *Recorder) BackfillInitialization(ctx context.Context) error {
 	if r.initManaged || r.isMainWorktree() || r.initRefHash(ctx) != "" {
 		return nil
@@ -254,8 +256,7 @@ func (r *Recorder) BackfillInitialization(ctx context.Context) error {
 		if err != nil {
 			return nil
 		}
-		if !strings.HasPrefix(subject, "base:") &&
-			!(strings.HasPrefix(subject, "archive:") && r.treeEmpty(ctx, root)) {
+		if !strings.HasPrefix(subject, "base:") {
 			return nil
 		}
 		first := r.firstCommitAfter(ctx, root)
@@ -298,12 +299,6 @@ func (r *Recorder) isMainWorktree() bool {
 		return false
 	}
 	return filepath.Clean(r.Project.MainWorktree) == filepath.Clean(r.Worktree.Path)
-}
-
-// treeEmpty reports whether a commit's tree contains no files.
-func (r *Recorder) treeEmpty(ctx context.Context, hash string) bool {
-	output, err := runGit(ctx, r.Placeholder, "ls-tree", "-r", "--name-only", hash)
-	return err == nil && strings.TrimSpace(output) == ""
 }
 
 // firstCommitAfter returns the oldest commit that is an ancestor of HEAD but

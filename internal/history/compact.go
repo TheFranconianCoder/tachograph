@@ -15,7 +15,8 @@ import (
 // The tiers are applied by age: every snapshot inside KeepAllFor is kept, then
 // one per hour, then one per day, then one per week. MaxAge drops the rest;
 // zero keeps the weekly tier forever. KeepMinimum always keeps the newest N
-// commits, and the tip is never dropped.
+// commits, and the tip is never dropped. The hidden initialization prefix of a
+// linked worktree is never touched, whatever the tiers say.
 type RetentionOptions struct {
 	KeepMinimum int
 	KeepAllFor  time.Duration
@@ -92,7 +93,15 @@ func (s *Store) compactProjectAt(ctx context.Context, projectDir string, opts Re
 		if len(commits) == 0 {
 			continue
 		}
-		plan := planRetention(commits, now, opts)
+		// The root and every commit up to the initialization baseline are a
+		// separate, immutable prefix. Retention only rewrites the visible
+		// snapshots above it.
+		initIndex := commitIndex(commits, initTarget)
+		protected := 1
+		if initIndex >= 0 {
+			protected = initIndex + 1
+		}
+		plan := planRetention(commits, now, opts, protected)
 		if plan.dropped == 0 {
 			for _, commit := range commits {
 				remap[commit.Hash] = commit.Hash
@@ -116,15 +125,17 @@ func (s *Store) compactProjectAt(ctx context.Context, projectDir string, opts Re
 		for oldHash, newHash := range branchRemap {
 			remap[oldHash] = newHash
 		}
+		// The protected prefix is reused unchanged, so its hashes stay valid.
+		for i := 0; i < protected; i++ {
+			remap[commits[i].Hash] = commits[i].Hash
+		}
 		if _, stderr, err := runGitRaw(ctx, repo, "update-ref", ref, newTip, oldTip); err != nil {
 			return result, fmt.Errorf("update %s: %w (%s)", ref, err, strings.TrimSpace(stderr))
 		}
-		if initTarget != "" {
-			if mapped, ok := branchRemap[initTarget]; ok {
-				if _, stderr, err := runGitRaw(ctx, repo, "update-ref", initRef, mapped); err != nil {
-					return result, fmt.Errorf("remap %s: %w (%s)", initRef, err, strings.TrimSpace(stderr))
-				}
-			} else if _, stderr, err := runGitRaw(ctx, repo, "update-ref", "-d", initRef); err != nil {
+		// A baseline that is no longer on the branch is left over from an older
+		// compaction. It cannot describe this timeline anymore.
+		if initTarget != "" && initIndex < 0 {
+			if _, stderr, err := runGitRaw(ctx, repo, "update-ref", "-d", initRef); err != nil {
 				return result, fmt.Errorf("drop %s: %w (%s)", initRef, err, strings.TrimSpace(stderr))
 			}
 		}
@@ -186,15 +197,36 @@ func branchCommits(ctx context.Context, repo, ref string) ([]commitInfo, error) 
 }
 
 type retentionPlan struct {
-	keep           []bool
-	firstKept      int
-	leadingDropped int
-	kept           int
-	dropped        int
+	keep []bool
+	// protected is the number of leading commits that form the immutable
+	// initialization prefix. firstKept is the first kept commit overall (the
+	// prefix itself when protected > 0), firstVisibleKept the first kept commit
+	// above the prefix, and leadingDropped counts the visible commits dropped
+	// before that one.
+	protected        int
+	firstKept        int
+	firstVisibleKept int
+	leadingDropped   int
+	kept             int
+	dropped          int
 }
 
-func planRetention(commits []commitInfo, now time.Time, opts RetentionOptions) retentionPlan {
-	plan := retentionPlan{keep: make([]bool, len(commits)), firstKept: len(commits)}
+func planRetention(commits []commitInfo, now time.Time, opts RetentionOptions, protected int) retentionPlan {
+	plan := retentionPlan{
+		keep:             make([]bool, len(commits)),
+		firstKept:        len(commits),
+		firstVisibleKept: len(commits),
+	}
+	if protected < 0 {
+		protected = 0
+	}
+	if protected > len(commits) {
+		protected = len(commits)
+	}
+	plan.protected = protected
+	for i := 0; i < protected; i++ {
+		plan.keep[i] = true
+	}
 
 	minimum := opts.KeepMinimum
 	if minimum < 0 {
@@ -215,7 +247,7 @@ func planRetention(commits []commitInfo, now time.Time, opts RetentionOptions) r
 	days := make(map[string]bool)
 	weeks := make(map[string]bool)
 
-	for i := len(commits) - 1; i >= 0; i-- {
+	for i := len(commits) - 1; i >= protected; i-- {
 		if plan.keep[i] {
 			continue
 		}
@@ -267,6 +299,9 @@ func planRetention(commits []commitInfo, now time.Time, opts RetentionOptions) r
 			if plan.firstKept == len(commits) {
 				plan.firstKept = i
 			}
+			if i >= protected && plan.firstVisibleKept == len(commits) {
+				plan.firstVisibleKept = i
+			}
 			plan.kept++
 		} else {
 			plan.dropped++
@@ -276,10 +311,13 @@ func planRetention(commits []commitInfo, now time.Time, opts RetentionOptions) r
 		// Defensive: never produce an empty branch.
 		plan.keep[len(commits)-1] = true
 		plan.firstKept = len(commits) - 1
+		plan.firstVisibleKept = len(commits) - 1
 		plan.kept = 1
 		plan.dropped = len(commits) - 1
 	}
-	plan.leadingDropped = plan.firstKept
+	if plan.firstVisibleKept < len(commits) {
+		plan.leadingDropped = plan.firstVisibleKept - protected
+	}
 	return plan
 }
 
@@ -307,15 +345,35 @@ func refValue(ctx context.Context, repo, ref string) string {
 	return hash
 }
 
-// rewriteBranch rebuilds the branch from the kept commits. With Archive, the
-// state immediately before the first kept commit becomes an archive root, so
-// the pre-retention state survives even when its snapshots do not.
+// commitIndex returns the position of hash in commits, or -1 when the commit is
+// not part of the branch.
+func commitIndex(commits []commitInfo, hash string) int {
+	if hash == "" {
+		return -1
+	}
+	for i, commit := range commits {
+		if commit.Hash == hash {
+			return i
+		}
+	}
+	return -1
+}
+
+// rewriteBranch rebuilds the visible part of the branch. The protected
+// initialization prefix is reused unchanged and stays the parent of the first
+// rewritten commit. With Archive, the state immediately before the first kept
+// visible commit becomes an archive root below the kept snapshots, so the
+// pre-retention state survives even when its snapshots do not.
 func rewriteBranch(ctx context.Context, repo string, commits []commitInfo, plan retentionPlan, archive bool) (string, map[string]string, error) {
 	parent := ""
-	if archive && plan.leadingDropped > 0 && plan.firstKept > 0 {
-		base := commits[plan.firstKept-1]
+	if plan.protected > 0 && plan.protected <= len(commits) {
+		parent = commits[plan.protected-1].Hash
+	}
+
+	if archive && plan.leadingDropped > 0 && plan.firstVisibleKept > plan.protected {
+		base := commits[plan.firstVisibleKept-1]
 		message := "archive: " + base.Time.UTC().Format(time.RFC3339)
-		hash, err := commitTree(ctx, repo, base.Tree, "", base.Time, message)
+		hash, err := commitTree(ctx, repo, base.Tree, parent, base.Time, message)
 		if err != nil {
 			return "", nil, err
 		}
@@ -323,7 +381,7 @@ func rewriteBranch(ctx context.Context, repo string, commits []commitInfo, plan 
 	}
 
 	remap := make(map[string]string)
-	for i := plan.firstKept; i < len(commits); i++ {
+	for i := plan.firstVisibleKept; i < len(commits); i++ {
 		if !plan.keep[i] {
 			continue
 		}

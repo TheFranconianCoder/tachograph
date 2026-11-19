@@ -310,10 +310,13 @@ packs the rest. A background job additionally thins old snapshots:
 - one per day up to `dailyFor` (30 days)
 - one per week up to `maxAge` (90 days); `0` keeps the weekly tier forever
 - the newest `keepMinimum` (50) commits are always kept, and the tip is never dropped
+- the hidden initialization prefix of a linked worktree (base root through the recorded baseline)
+  is immutable: retention only thins the visible snapshots above it
 
 With `archive: true` the state immediately before the retained window becomes an `archive:` root
-commit, so the old state survives even though its intermediate snapshots do not. A rewrite reuses
-the original trees and commit dates, so the tip tree—and therefore the next snapshot—is unchanged.
+commit, so the old state survives even though its intermediate snapshots do not. The archive root is
+parented on the initialization baseline, never on the emptied base root. A rewrite reuses the
+original trees and commit dates, so the tip tree—and therefore the next snapshot—is unchanged.
 `autoGc` then expires the reflog and prunes the dropped objects. The job runs one minute after start
 and then every `interval`.
 
@@ -330,7 +333,9 @@ still settling, snapshots that only add files stay part of the hidden source cop
 checks for a quiet period after each one, ends the window at the first tracked edit, and records the
 baseline in `refs/tachograph/init/<worktree>`. The main worktree keeps its complete history. Stores
 created before this marker existed use a read-time fallback over the leading addition-only snapshots,
-so an initialization that was split over multiple snapshots stays hidden there too.
+so an initialization that was split over multiple snapshots stays hidden there too. An `archive:`
+root is a retained historical state, never an initialization marker, so a compaction cannot hide
+visible snapshots below it.
 
 ```text
 GET  /api/v1/timeline?path=<worktree>&limit=50&offset=0&file=<relative path>
@@ -447,10 +452,10 @@ is the stable identity; the slug is there to keep the paths readable.
 Each worktree gets its own branch (`wt/<worktree-dir>`) and index. A snapshot is a commit in that
 branch with the message `snap: <RFC3339> [<branch>@<head>]`; the initial commit is
 `base: history initialized`. The hidden initialization baseline lives in
-`refs/tachograph/init/<worktree-dir>`; compaction moves it together with the rewritten branch and
-drops it when the baseline is folded into an `archive:` root. The project's own branches, index and
-reflog stay untouched. Use `history.root` in the config or `--data-dir DIR` to keep the history
-somewhere else.
+`refs/tachograph/init/<worktree-dir>`; compaction keeps the prefix up to the baseline in place and
+never folds it into an `archive:` root, so the visible snapshots always stay distinguishable from the
+source copy. The project's own branches, index and reflog stay untouched. Use `history.root` in the
+config or `--data-dir DIR` to keep the history somewhere else.
 
 ### Icons
 

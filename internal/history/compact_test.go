@@ -33,7 +33,7 @@ func TestPlanRetentionTiers(t *testing.T) {
 		DailyFor:   30 * 24 * time.Hour,
 		MaxAge:     90 * 24 * time.Hour,
 	}
-	plan := planRetention(commits, now, opts)
+	plan := planRetention(commits, now, opts, 0)
 
 	// 40d is the weekly survivor, 8d the daily survivor, 31h and 29h50m are the
 	// hourly survivors, 0 is the tip. The same-hour/same-day duplicates and the
@@ -68,7 +68,7 @@ func TestPlanRetentionKeepsMinimumAndTip(t *testing.T) {
 		MaxAge:      time.Nanosecond,
 		Archive:     true,
 	}
-	plan := planRetention(commits, now, opts)
+	plan := planRetention(commits, now, opts, 0)
 
 	kept := 0
 	for _, keep := range plan.keep {
@@ -87,6 +87,35 @@ func TestPlanRetentionKeepsMinimumAndTip(t *testing.T) {
 	}
 }
 
+func TestPlanRetentionProtectsInitializationPrefix(t *testing.T) {
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	commits := make([]commitInfo, 5)
+	for i := range commits {
+		commits[i] = commitInfo{Time: now.Add(-time.Duration(len(commits)-i) * 24 * time.Hour)}
+	}
+	plan := planRetention(commits, now, RetentionOptions{
+		KeepMinimum: 1,
+		MaxAge:      time.Nanosecond,
+	}, 2)
+
+	if !plan.keep[0] || !plan.keep[1] {
+		t.Errorf("initialization prefix dropped: %v", plan.keep)
+	}
+	if plan.protected != 2 || plan.firstKept != 0 {
+		t.Errorf("protected/firstKept = %d/%d, want 2/0", plan.protected, plan.firstKept)
+	}
+	if plan.firstVisibleKept != len(commits)-1 {
+		t.Errorf("firstVisibleKept = %d, want %d (the minimum keeps the tip)",
+			plan.firstVisibleKept, len(commits)-1)
+	}
+	if plan.leadingDropped != 2 {
+		t.Errorf("leadingDropped = %d, want 2 visible commits before the tip", plan.leadingDropped)
+	}
+	if plan.kept != 3 || plan.dropped != 2 {
+		t.Errorf("kept/dropped = %d/%d, want 3/2", plan.kept, plan.dropped)
+	}
+}
+
 func TestPlanRetentionKeepsArchiveRoot(t *testing.T) {
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	commits := []commitInfo{
@@ -98,7 +127,7 @@ func TestPlanRetentionKeepsArchiveRoot(t *testing.T) {
 	plan := planRetention(commits, now, RetentionOptions{
 		KeepMinimum: 1,
 		MaxAge:      time.Nanosecond,
-	})
+	}, 0)
 	if !plan.keep[0] {
 		t.Error("archive root was dropped")
 	}
@@ -142,7 +171,7 @@ func TestCompactProjectDropsOldCommitsAndKeepsTip(t *testing.T) {
 		}
 		snapshots = append(snapshots, snapshot)
 	}
-	if _, err := recorder.SetLabel(ctx, snapshots[0].Hash, "old"); err != nil {
+	if _, err := recorder.SetLabel(ctx, snapshots[1].Hash, "old"); err != nil {
 		t.Fatalf("SetLabel old: %v", err)
 	}
 	if _, err := recorder.SetLabel(ctx, snapshots[len(snapshots)-1].Hash, "keep me"); err != nil {
@@ -168,23 +197,50 @@ func TestCompactProjectDropsOldCommitsAndKeepsTip(t *testing.T) {
 	if result.Dropped == 0 {
 		t.Fatalf("result = %+v, want dropped commits", result)
 	}
-	// The hidden initialization baseline was part of the dropped prefix; its
-	// ref must not keep the old objects alive.
-	if _, err := runGit(ctx, repo, "rev-parse", "--verify", "--quiet", initRefName(recorder.Worktree.Dir)); err == nil {
-		t.Error("initialization baseline ref survived compaction")
+	// The initialization prefix is immutable: the baseline ref still points at
+	// the source copy, and the root plus that snapshot are still on the branch.
+	if got := strings.TrimSpace(mustGit(t, repo, "rev-parse", initRefName(recorder.Worktree.Dir))); got != snapshots[0].Hash {
+		t.Errorf("initialization baseline = %s, want %s", got, snapshots[0].Hash)
+	}
+	ordered := strings.Fields(mustGit(t, repo, "rev-list", "--reverse", branch))
+	if len(ordered) != 5 {
+		t.Fatalf("branch commits = %d, want 5 (base + baseline + archive + two kept snapshots)", len(ordered))
+	}
+	if subject := strings.TrimSpace(mustGit(t, repo, "show", "-s", "--format=%s", ordered[0])); !strings.HasPrefix(subject, "base:") {
+		t.Errorf("branch root subject = %q, want a base commit", subject)
+	}
+	if ordered[1] != snapshots[0].Hash {
+		t.Errorf("oldest snapshot = %s, want the initialization baseline %s", ordered[1], snapshots[0].Hash)
 	}
 
 	summary, err := recorder.Summary(ctx)
 	if err != nil {
 		t.Fatalf("Summary: %v", err)
 	}
-	if summary.Snapshots != 2 {
-		t.Errorf("snapshots after compaction = %d, want 2", summary.Snapshots)
+	if summary.Snapshots != 3 {
+		t.Errorf("snapshots after compaction = %d, want 3 (baseline plus two kept snapshots)", summary.Snapshots)
 	}
 
-	count := strings.TrimSpace(mustGit(t, repo, "rev-list", "--count", branch))
-	if count != "3" {
-		t.Errorf("branch commits = %s, want 3 (archive + two kept snapshots)", count)
+	// The archive root represents the dropped visible state and is parented on
+	// the initialization baseline, never on the emptied base root.
+	archive := ordered[2]
+	if subject := strings.TrimSpace(mustGit(t, repo, "show", "-s", "--format=%s", archive)); !strings.HasPrefix(subject, "archive:") {
+		t.Errorf("archive subject = %q, want an archive commit", subject)
+	}
+	if parent := strings.TrimSpace(mustGit(t, repo, "rev-parse", archive+"^")); parent != snapshots[0].Hash {
+		t.Errorf("archive parent = %s, want the initialization baseline %s", parent, snapshots[0].Hash)
+	}
+
+	// The visible snapshots stay visible after the rewrite.
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline: %v", err)
+	}
+	if len(page.Entries) != 3 {
+		t.Fatalf("timeline entries = %d, want 3 (archive + two kept snapshots)", len(page.Entries))
+	}
+	if page.Entries[len(page.Entries)-1].Kind != "archive" {
+		t.Errorf("oldest timeline entry kind = %q, want archive", page.Entries[len(page.Entries)-1].Kind)
 	}
 
 	afterTree := strings.TrimSpace(mustGit(t, repo, "rev-parse", branch+"^{tree}"))
@@ -236,7 +292,7 @@ func TestCompactProjectDropsOldCommitsAndKeepsTip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Summary after new snapshot: %v", err)
 	}
-	if summary.Snapshots != 3 {
-		t.Errorf("snapshots after new snapshot = %d, want 3", summary.Snapshots)
+	if summary.Snapshots != 4 {
+		t.Errorf("snapshots after new snapshot = %d, want 4", summary.Snapshots)
 	}
 }

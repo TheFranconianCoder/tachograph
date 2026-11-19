@@ -789,6 +789,60 @@ func TestLegacyInitializationPrefixStaysHidden(t *testing.T) {
 	}
 }
 
+func TestEmptyArchiveRootDoesNotHideVisibleSnapshots(t *testing.T) {
+	recorder, worktree := newRevertRecorder(t)
+	ctx := t.Context()
+
+	// A tracked edit closes the initialization window; the added file is a
+	// second real change. Both are visible work.
+	writeFile(t, filepath.Join(worktree, "keep.txt"), "edit\n")
+	edit, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("edit snapshot: %v", err)
+	}
+	writeFile(t, filepath.Join(worktree, "later.txt"), "later\n")
+	later, err := recorder.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("later snapshot: %v", err)
+	}
+
+	// Simulate a store compacted by an older version: the branch begins with an
+	// empty archive root, and the initialization ref is gone.
+	mustGit(t, recorder.Placeholder, "update-ref", "-d", initRefName(recorder.Worktree.Dir))
+	const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+	tree := func(hash string) string {
+		return strings.TrimSpace(mustGit(t, recorder.Placeholder, "rev-parse", hash+"^{tree}"))
+	}
+	archive, err := commitTree(ctx, recorder.Placeholder, emptyTree, "",
+		edit.CreatedAt, "archive: "+edit.CreatedAt.UTC().Format(time.RFC3339))
+	if err != nil {
+		t.Fatalf("commit archive root: %v", err)
+	}
+	editHash, err := commitTree(ctx, recorder.Placeholder, tree(edit.Hash), archive, edit.CreatedAt, edit.Message)
+	if err != nil {
+		t.Fatalf("rewrite edit snapshot: %v", err)
+	}
+	laterHash, err := commitTree(ctx, recorder.Placeholder, tree(later.Hash), editHash, later.CreatedAt, later.Message)
+	if err != nil {
+		t.Fatalf("rewrite later snapshot: %v", err)
+	}
+	mustGit(t, recorder.Placeholder, "update-ref", "refs/heads/"+recorder.Worktree.HistoryBranch, laterHash)
+
+	page, err := recorder.Timeline(ctx, 50, 0, "")
+	if err != nil {
+		t.Fatalf("Timeline: %v", err)
+	}
+	if len(page.Entries) != 3 {
+		t.Fatalf("timeline entries = %d, want archive + two visible snapshots", len(page.Entries))
+	}
+	if page.Entries[len(page.Entries)-1].Kind != "archive" {
+		t.Errorf("oldest entry kind = %q, want archive", page.Entries[len(page.Entries)-1].Kind)
+	}
+	if page.Entries[0].Hash != laterHash || page.Entries[1].Hash != editHash {
+		t.Errorf("timeline = %+v, want both visible snapshots", page.Entries)
+	}
+}
+
 func TestWorktreeDetailCombinesAllVisibleSnapshots(t *testing.T) {
 	recorder, worktree := newRevertRecorder(t)
 	ctx := t.Context()

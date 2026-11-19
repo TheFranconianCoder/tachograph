@@ -346,6 +346,9 @@ detection and project-repository isolation.
 
 - Background retention per project: every snapshot for 24 h, one per hour up to 7 days, one per day
   up to 30 days, one per week up to 90 days; the newest 50 commits and the tip are always kept.
+- The initialization prefix of a linked worktree (root through the recorded baseline) is immutable:
+  retention rewrites only the visible snapshots and parents the archive root on that baseline, so a
+  compaction can never make the timeline hide real changes.
 - Rewrites use `git commit-tree`/`update-ref` with the original trees and dates, so the tip and the
   next snapshot stay untouched. `archive: true` keeps the state before the retained window as an
   `archive:` root commit.
