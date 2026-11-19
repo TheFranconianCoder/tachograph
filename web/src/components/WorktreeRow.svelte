@@ -11,6 +11,7 @@
         relativeTime,
         watcherTitle,
     } from '../lib/format';
+    import { tooltip } from '../lib/tooltip.svelte';
     import type { Worktree } from '../lib/types';
 
     interface Props {
@@ -37,17 +38,17 @@
 <li class="worktree-row">
     <DirtyMarker dirty={worktree.dirty ?? false} />
     <div class="worktree-row__main">
-        <span class="worktree-row__name truncate" title={worktree.path}>
+        <span class="worktree-row__name truncate" use:tooltip={worktree.path}>
             {baseName(worktree.path)}
         </span>
-        <span class="worktree-row__branch mono truncate" title={worktree.branch}>
+        <span class="worktree-row__branch mono truncate" use:tooltip={worktree.branch}>
             {worktree.branch}
         </span>
         <button
             type="button"
             class="icon-btn icon-btn--inline"
             class:copied={copiedPath === worktree.path}
-            title={copiedPath === worktree.path ? 'Copied' : 'Copy worktree path'}
+            use:tooltip={copiedPath === worktree.path ? 'Copied' : 'Copy worktree path'}
             aria-label="Copy worktree path"
             onclick={() => copyPath(worktree.path)}
         >
@@ -55,9 +56,9 @@
         </button>
     </div>
 
-    <span class="worktree-row__meta mono faint" title={progressTitle(worktree)}>
+    <span class="worktree-row__meta mono faint" use:tooltip={progressTitle(worktree)}>
         {#if worktree.stats}
-            <span class="worktree-row__stats" title={changeTitle(worktree.stats)}>
+            <span class="worktree-row__stats" use:tooltip={changeTitle(worktree.stats)}>
                 <span class="activity-added">+{formatCount(worktree.stats.added)}</span>
                 <span class="activity-deleted">-{formatCount(worktree.stats.deleted)}</span>
             </span>
@@ -70,7 +71,7 @@
         <button
             type="button"
             class="icon-btn icon-btn--inline"
-            title={worktree.id ? 'Open timeline' : 'Timeline unavailable'}
+            use:tooltip={worktree.id ? 'Open timeline' : 'Timeline unavailable'}
             aria-label="Open timeline"
             disabled={!worktree.id}
             onclick={() => onOpenTimeline(worktree)}
@@ -81,7 +82,7 @@
 
     <Lamp state={lifecycle} title={lifecycleTitle(worktree)} />
 
-    <span class={`worktree-state worktree-state--${state}`} title={watcherTitle(worktree)}>
+    <span class={`worktree-state worktree-state--${state}`} use:tooltip={watcherTitle(worktree)}>
         <span class="worktree-state__dot"></span>
         {state}
     </span>

@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { tooltip } from '../../lib/tooltip.svelte';
+
     interface Props {
         dirty: boolean;
     }
@@ -10,7 +12,7 @@
     class="dirty-marker"
     class:is-dirty={dirty}
     role={dirty ? 'img' : undefined}
-    title={dirty ? 'Uncommitted changes in the worktree' : undefined}
+    use:tooltip={dirty ? 'Uncommitted changes in the worktree' : ''}
     aria-label={dirty ? 'Uncommitted changes in the worktree' : undefined}
 >
     <span class="dirty-marker__dot"></span>

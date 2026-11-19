@@ -1,5 +1,6 @@
 <script lang="ts">
     import Icon from './ui/Icon.svelte';
+    import { tooltip } from '../lib/tooltip.svelte';
     import type { WorktreeSetup } from '../lib/types';
 
     interface Props {
@@ -126,7 +127,7 @@
                     <button
                         type="button"
                         class="icon-btn"
-                        title="Remove pattern"
+                        use:tooltip={'Remove pattern'}
                         aria-label="Remove pattern"
                         onclick={() => removePattern(index)}
                         disabled={saving || applying}
@@ -166,7 +167,7 @@
                 class="btn btn--ghost btn--sm"
                 onclick={apply}
                 disabled={saving || applying || dirty}
-                title={dirty
+                use:tooltip={dirty
                     ? 'Save the copy rules first'
                     : 'Copy missing files into existing worktrees'}
             >

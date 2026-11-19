@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from './ui/Icon.svelte';
     import { absoluteTime, relativeTime } from '../lib/format';
+    import { tooltip } from '../lib/tooltip.svelte';
     import type { ConnectionState, Status } from '../lib/types';
 
     interface Props {
@@ -71,7 +72,7 @@
 <section class="panel status-panel">
     <div class="panel-head">
         <h2>Status</h2>
-        <span class={`chip ${connectionClass}`} title={connectionTitle}>
+        <span class={`chip ${connectionClass}`} use:tooltip={connectionTitle}>
             <span class="chip-dot"></span>
             {connection}
         </span>
@@ -99,17 +100,26 @@
         </div>
 
         <div class="state-strip" aria-label="Recorder states">
-            <span class="state-pill" title="watchexec is active for these worktrees">
+            <span
+                class="state-pill"
+                use:tooltip={'watchexec is active for these worktrees'}
+            >
                 <span class="state-dot state-dot--watching"></span>
                 <span class="state-count">{recorderCounts.watching}</span>
                 <span class="state-name">Watching</span>
             </span>
-            <span class="state-pill" title="These worktrees are checked by polling">
+            <span
+                class="state-pill"
+                use:tooltip={'These worktrees are checked by polling'}
+            >
                 <span class="state-dot state-dot--polling"></span>
                 <span class="state-count">{recorderCounts.polling}</span>
                 <span class="state-name">Polling</span>
             </span>
-            <span class="state-pill" title="Hibernated worktrees poll at the maximum interval">
+            <span
+                class="state-pill"
+                use:tooltip={'Hibernated worktrees poll at the maximum interval'}
+            >
                 <span class="state-dot state-dot--idle"></span>
                 <span class="state-count">{recorderCounts.idle}</span>
                 <span class="state-name">Idle</span>
@@ -134,7 +144,7 @@
                     <span class="k">Watcher</span>
                     <span
                         class="v"
-                        title={status?.watcherEngine === 'watchexec'
+                        use:tooltip={status?.watcherEngine === 'watchexec'
                             ? 'watchexec events, polling as fallback'
                             : 'polling only (watchexec not available)'}
                     >
@@ -143,12 +153,12 @@
                 </div>
                 <div class="kv">
                     <span class="k">Diff</span>
-                    <span class="v" title={diffTitle}>{diffLabel}</span>
+                    <span class="v" use:tooltip={diffTitle}>{diffLabel}</span>
                 </div>
                 <div class="kv"><span class="k">Roots</span><span class="v">{rootsCount}</span></div>
                 <div class="kv">
                     <span class="k">Last scan</span>
-                    <span class="v" title={absoluteTime(lastScanAt)}>
+                    <span class="v" use:tooltip={absoluteTime(lastScanAt)}>
                         {lastScanAt ? relativeTime(lastScanAt, now) : 'never'}
                     </span>
                 </div>

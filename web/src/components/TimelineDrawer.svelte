@@ -15,6 +15,7 @@
     } from '../lib/timeline';
     import type { SnapshotDetail, TimelineEntry } from '../lib/timeline';
     import { resolvedTheme } from '../lib/theme.svelte';
+    import { tooltip } from '../lib/tooltip.svelte';
     import type { Worktree } from '../lib/types';
 
     interface Props {
@@ -444,7 +445,7 @@
     <header class="drawer-head">
         <div class="drawer-title">
             <h2>Timeline</h2>
-            <p class="drawer-sub mono truncate" title={worktreePath}>
+            <p class="drawer-sub mono truncate" use:tooltip={worktreePath}>
                 {projectName || '—'} · {worktree.branch}
             </p>
         </div>
@@ -487,7 +488,7 @@
                             class="btn btn--ghost btn--sm timeline-all"
                             class:active={all}
                             aria-pressed={all}
-                            title={all
+                            use:tooltip={all
                                 ? 'Clear the all-snapshots selection'
                                 : 'Select every snapshot and show the whole worktree diff'}
                             onclick={onToggleAll}
@@ -510,7 +511,7 @@
                                     (rangeBounds !== null &&
                                         index >= rangeBounds.first &&
                                         index <= rangeBounds.last)}
-                                title={entryTitle(entry)}
+                                use:tooltip={entryTitle(entry)}
                                 aria-label={entryTitle(entry)}
                                 onclick={event => select(entry, event.shiftKey)}
                             >
@@ -550,15 +551,15 @@
                 <header class="detail-head">
                     <div class="detail-head__row">
                         <span class={`kind kind--${detail.kind}`}>{kindLabel(detail.kind)}</span>
-                        <span class="mono faint" title={detail.hash}>{detail.hash.slice(0, 12)}</span>
-                        <span class="faint" title={absoluteTime(detail.time)}>
+                        <span class="mono faint" use:tooltip={detail.hash}>{detail.hash.slice(0, 12)}</span>
+                        <span class="faint" use:tooltip={absoluteTime(detail.time)}>
                             {relativeTime(detail.time, now)}
                         </span>
                         <span class="detail-head__actions">
                             {#if detail.diffTool}
                                 <span
                                     class="diff-tool mono faint"
-                                    title={diffToolTitle(detail.diffTool)}
+                                    use:tooltip={diffToolTitle(detail.diffTool)}
                                 >
                                     {diffToolLabel(detail.diffTool)}
                                 </span>
@@ -591,7 +592,7 @@
                             {:else}
                                 <span
                                     class="mono faint truncate"
-                                    title={`${selectedFrom} → ${selectedHash}`}
+                                    use:tooltip={`${selectedFrom} → ${selectedHash}`}
                                 >
                                     {selectedFrom?.slice(0, 8)} → {selectedHash?.slice(0, 8)}
                                 </span>
@@ -607,7 +608,7 @@
                     {/if}
                     <h3>{detail.subject}</h3>
                     {#if detail.parent && !all}
-                        <p class="muted mono detail-parent" title={detail.parent}>
+                        <p class="muted mono detail-parent" use:tooltip={detail.parent}>
                             parent {detail.parent.slice(0, 12)}
                         </p>
                     {/if}
@@ -647,7 +648,7 @@
                                 <button
                                     type="button"
                                     class="label-chip"
-                                    title="Edit label"
+                                    use:tooltip={'Edit label'}
                                     onclick={() => void startLabelEdit()}
                                 >
                                     {detail.label}
@@ -675,7 +676,7 @@
                                 <button
                                     type="button"
                                     class="detail-file__main"
-                                    title={selectedSet.has(file.path)
+                                    use:tooltip={selectedSet.has(file.path)
                                         ? 'Remove from selection'
                                         : 'Select file (Shift, Ctrl or Cmd for multiple)'}
                                     onclick={event => selectFile(file.path, event)}
@@ -683,12 +684,12 @@
                                     <span class={`file-status file-status--${file.status}`}>
                                         {file.status}
                                     </span>
-                                    <span class="mono truncate" title={file.path}>{file.path}</span>
+                                    <span class="mono truncate" use:tooltip={file.path}>{file.path}</span>
                                 </button>
                                 <button
                                     type="button"
                                     class="icon-btn icon-btn--inline detail-file__filter"
-                                    title={`Filter timeline by ${file.path}`}
+                                    use:tooltip={`Filter timeline by ${file.path}`}
                                     aria-label={`Filter timeline by ${file.path}`}
                                     onclick={() => filterByFile(file.path)}
                                 >
@@ -717,7 +718,7 @@
                         <span class="faint">Diff</span>
                         <span
                             class="diff-scope__label mono truncate"
-                            title={selectedFiles.join('\n')}
+                            use:tooltip={selectedFiles.join('\n')}
                         >
                             {selectedFiles.length === 1
                                 ? selectedFiles[0]

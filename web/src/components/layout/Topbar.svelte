@@ -1,6 +1,7 @@
 <script lang="ts">
     import Icon from '../ui/Icon.svelte';
     import { cycleTheme, themeIcon, themeLabel } from '../../lib/theme.svelte';
+    import { tooltip } from '../../lib/tooltip.svelte';
     import type { ConnectionState } from '../../lib/types';
 
     interface Props {
@@ -17,11 +18,16 @@
         <span class="brand-name">Tachograph</span>
     </div>
     <div class="topbar-actions">
-        <span class={`connection connection--${connection}`} title={connectionTitle}>
+        <span class={`connection connection--${connection}`} use:tooltip={connectionTitle}>
             <span class="connection__dot"></span>
             {connection}
         </span>
-        <button class="icon-btn" title={themeLabel()} aria-label={themeLabel()} onclick={cycleTheme}>
+        <button
+            class="icon-btn"
+            use:tooltip={themeLabel()}
+            aria-label={themeLabel()}
+            onclick={cycleTheme}
+        >
             <Icon name={themeIcon()} size={17} />
         </button>
     </div>

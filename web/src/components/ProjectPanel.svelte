@@ -5,6 +5,7 @@
     import SyncBadge from './ui/SyncBadge.svelte';
     import WorktreeRow from './WorktreeRow.svelte';
     import { lifecycleTitle, progressTitle, relativeTime, watcherTitle } from '../lib/format';
+    import { tooltip } from '../lib/tooltip.svelte';
     import type { Project, Worktree } from '../lib/types';
 
     interface Props {
@@ -47,19 +48,21 @@
         <div class="worktree-row__main">
             <h2
                 class="truncate"
-                title={main ? `${main.path} · ${project.worktrees.length} worktrees` : project.name}
+                use:tooltip={main
+                    ? `${main.path} · ${project.worktrees.length} worktrees`
+                    : project.name}
             >
                 {project.name}
             </h2>
             {#if main}
-                <span class="worktree-row__branch mono truncate" title={main.branch}>
+                <span class="worktree-row__branch mono truncate" use:tooltip={main.branch}>
                     {main.branch}
                 </span>
                 <button
                     type="button"
                     class="icon-btn icon-btn--inline"
                     class:copied={copiedPath === main.path}
-                    title={copiedPath === main.path ? 'Copied' : 'Copy worktree path'}
+                    use:tooltip={copiedPath === main.path ? 'Copied' : 'Copy worktree path'}
                     aria-label="Copy worktree path"
                     onclick={() => copyPath(main.path)}
                 >
@@ -71,7 +74,7 @@
                     type="button"
                     class="icon-btn icon-btn--inline"
                     class:copied={copiedPath === project.historyRepo}
-                    title={copiedPath === project.historyRepo
+                    use:tooltip={copiedPath === project.historyRepo
                         ? 'Copied'
                         : 'Copy history repository path'}
                     aria-label="Copy history repository path"
@@ -90,7 +93,7 @@
         </div>
 
         {#if main}
-            <span class="worktree-row__meta mono faint" title={progressTitle(main)}>
+            <span class="worktree-row__meta mono faint" use:tooltip={progressTitle(main)}>
                 {snaps} {snaps === 1 ? 'snap' : 'snaps'}
                 {#if main.lastSnapshot}
                     · {relativeTime(main.lastSnapshot, now)}
@@ -98,7 +101,7 @@
                 <button
                     type="button"
                     class="icon-btn icon-btn--inline"
-                    title={main.id ? 'Open timeline' : 'Timeline unavailable'}
+                    use:tooltip={main.id ? 'Open timeline' : 'Timeline unavailable'}
                     aria-label="Open timeline"
                     disabled={!main.id}
                     onclick={() => onOpenTimeline(main)}
@@ -109,7 +112,7 @@
 
             <Lamp state={lifecycle} title={lifecycleTitle(main)} />
 
-            <span class={`worktree-state worktree-state--${state}`} title={watcherTitle(main)}>
+            <span class={`worktree-state worktree-state--${state}`} use:tooltip={watcherTitle(main)}>
                 <span class="worktree-state__dot"></span>
                 {state}
             </span>

@@ -1,5 +1,6 @@
 <script lang="ts">
     import Icon from './ui/Icon.svelte';
+    import { tooltip } from '../lib/tooltip.svelte';
 
     interface Props {
         roots: string[];
@@ -61,13 +62,13 @@
                 {#each roots as root (root)}
                     <li class="row">
                         <span class="row__main">
-                            <span class="row__title mono truncate" title={root}>{root}</span>
+                            <span class="row__title mono truncate" use:tooltip={root}>{root}</span>
                         </span>
                         <span class="row__actions">
                             <button
                                 type="button"
                                 class="icon-btn"
-                                title="Remove root"
+                                use:tooltip={'Remove root'}
                                 aria-label="Remove root"
                                 onclick={() => onRemove(root)}
                                 disabled={busy}
@@ -120,7 +121,7 @@
                     {#each patterns as pattern (pattern)}
                         <li class="row">
                             <span class="row__main">
-                                <span class="row__title mono truncate" title={pattern}>
+                                <span class="row__title mono truncate" use:tooltip={pattern}>
                                     {pattern}
                                 </span>
                             </span>
@@ -128,7 +129,7 @@
                                 <button
                                     type="button"
                                     class="icon-btn"
-                                    title="Remove pattern"
+                                    use:tooltip={'Remove pattern'}
                                     aria-label="Remove pattern"
                                     onclick={() => onRemovePattern(pattern)}
                                     disabled={busy}

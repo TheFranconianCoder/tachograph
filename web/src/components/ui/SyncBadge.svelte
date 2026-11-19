@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { tooltip } from '../../lib/tooltip.svelte';
+
     interface Props {
         ahead: number;
         behind: number;
@@ -16,7 +18,7 @@
 </script>
 
 {#if ahead > 0 || behind > 0}
-    <span class="sync-badge mono" role="img" title={title} aria-label={title}>
+    <span class="sync-badge mono" role="img" use:tooltip={title} aria-label={title}>
         {#if ahead > 0}<span>↑{ahead}</span>{/if}
         {#if behind > 0}<span>↓{behind}</span>{/if}
     </span>

@@ -377,6 +377,9 @@ detection and project-repository isolation.
   `ActivityTable` and small UI primitives (`Icon`, `Lamp`, `EmptyState`).
 - The project header is the main worktree row (branch, snapshot age, timeline, lifecycle, recorder
   state); only linked worktrees follow as separate rows, so the main directory is not repeated.
+- Custom tooltips replace native `title` hints: one shared fixed layer with an inverted surface,
+  delayed on hover, immediate on keyboard focus, viewport-aware and dismissed by pointer, scroll,
+  resize, click or Escape.
 - Tray/CLI open uses smart open: the embedded manifest supplies the PWA name, the Linux XDG
   application directories are scanned for a Chromium `--app-id=` launcher, and `gio launch` (or
   `gtk-launch`) starts it. No launcher falls back to the OS URL handler.

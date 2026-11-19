@@ -1,6 +1,7 @@
 <script lang="ts">
     import { tick, type Snippet } from 'svelte';
     import Icon from './Icon.svelte';
+    import { tooltip } from '../../lib/tooltip.svelte';
 
     interface Props {
         open: boolean;
@@ -71,7 +72,13 @@
                         {#if title}<h2>{title}</h2>{/if}
                         {#if description}<p>{description}</p>{/if}
                     </div>
-                    <button type="button" class="icon-btn" title="Close" onclick={onClose}>
+                    <button
+                        type="button"
+                        class="icon-btn"
+                        use:tooltip={'Close'}
+                        aria-label="Close"
+                        onclick={onClose}
+                    >
                         <Icon name="close" />
                     </button>
                 </header>

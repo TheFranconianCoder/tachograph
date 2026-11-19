@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { tooltip } from '../../lib/tooltip.svelte';
+
     type LampState = 'ok' | 'error' | 'none' | 'watching' | 'polling' | 'idle' | 'paused';
 
     interface Props {
@@ -9,7 +11,12 @@
     const { state, title }: Props = $props();
 </script>
 
-<span class={`lamp lamp--${state}`} role="img" title={title} aria-label={title}>
+<span
+    class={`lamp lamp--${state}`}
+    role="img"
+    use:tooltip={title}
+    aria-label={title}
+>
     <span class="lamp-core"></span>
 </span>
 

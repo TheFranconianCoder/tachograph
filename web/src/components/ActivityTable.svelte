@@ -6,6 +6,7 @@
         relativeTime,
         shortHash,
     } from '../lib/format';
+    import { tooltip } from '../lib/tooltip.svelte';
     import type { Activity } from '../lib/types';
 
     interface Props {
@@ -67,7 +68,7 @@
                     class:clickable={path !== undefined && worktreeIDs.has(path)}
                     onclick={() => openEventTimeline(path)}
                 >
-                    <td class="mono muted" title={absoluteTime(event.time)}>
+                    <td class="mono muted" use:tooltip={absoluteTime(event.time)}>
                         {relativeTime(event.time, now)}
                     </td>
                     <td>
@@ -76,17 +77,17 @@
                             {event.kind}
                         </span>
                     </td>
-                    <td class="mono truncate" title={project ?? ''}>
+                    <td class="mono truncate" use:tooltip={project ?? ''}>
                         {project ?? '—'}
                     </td>
                     <td colspan="2" class="activity-main-cell">
                         <div class="activity-main">
-                            <span class="activity-branch-cell mono truncate" title={path ?? ''}>
+                            <span class="activity-branch-cell mono truncate" use:tooltip={path ?? ''}>
                                 {#if path && worktreeIDs.has(path)}
                                     <button
                                         type="button"
                                         class="activity-branch"
-                                        title={`Open history for ${path}`}
+                                        use:tooltip={`Open history for ${path}`}
                                         onclick={event => {
                                             event.stopPropagation();
                                             onOpenTimeline(path);
@@ -98,7 +99,7 @@
                                     {branch ?? '—'}
                                 {/if}
                             </span>
-                            <span class="activity-details mono" title={detailTitle}>
+                            <span class="activity-details mono" use:tooltip={detailTitle}>
                                 {#if event.message}
                                     {event.message}
                                 {:else if hash || event.stats}

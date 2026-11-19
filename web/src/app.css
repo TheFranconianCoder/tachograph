@@ -43,6 +43,11 @@
     --shadow-1: 0 1px 2px rgb(31 26 20 / 5%);
     --shadow-2: 0 0 0 1px rgb(31 26 20 / 5%), 0 12px 30px rgb(31 26 20 / 12%);
 
+    /* The tooltip is the one inverted surface: a hint is not paper, it is a note held above it. */
+    --tooltip-bg: #211f1b;
+    --tooltip-ink: #f7f5f1;
+    --tooltip-border: #3a352e;
+
     --radius-sm: 6px;
     --radius: 9px;
     --radius-pill: 999px;
@@ -84,6 +89,10 @@
 
     --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
     --shadow-2: 0 0 0 1px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 45%);
+
+    --tooltip-bg: #e6e8ea;
+    --tooltip-ink: #0c0f13;
+    --tooltip-border: #b6bcc4;
     color-scheme: dark;
 }
 
@@ -122,6 +131,10 @@
 
         --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
         --shadow-2: 0 0 0 1px rgb(0 0 0 / 30%), 0 14px 36px rgb(0 0 0 / 45%);
+
+        --tooltip-bg: #e6e8ea;
+        --tooltip-ink: #0c0f13;
+        --tooltip-border: #b6bcc4;
         color-scheme: dark;
     }
 }
@@ -1382,6 +1395,89 @@ details[open] > summary .panel-caret {
     min-width: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* ── Tooltips ──────────────────────────────────────────────────────────── */
+
+/* One layer for every hint (see lib/tooltip.svelte.ts). It is never interactive, so it never steals
+   a hover; it sits above every overlay, because a hint inside a dialog must not be clipped by it. */
+.tooltip {
+    position: fixed;
+    z-index: 100;
+    width: max-content;
+    max-width: min(46ch, calc(100vw - 16px));
+    padding: 0.4rem 0.55rem;
+    border: 1px solid var(--tooltip-border);
+    border-radius: var(--radius-sm);
+    background: var(--tooltip-bg);
+    box-shadow: var(--shadow-2);
+    color: var(--tooltip-ink);
+    font-size: 12px;
+    line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+}
+
+.tooltip.is-visible {
+    visibility: visible;
+    animation: tooltip-in 120ms var(--ease) forwards;
+}
+
+.tooltip.is-visible.is-below {
+    animation-name: tooltip-in-below;
+}
+
+.tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: var(--tooltip-arrow-x, 50%);
+    width: 8px;
+    height: 8px;
+    margin-top: -5px;
+    margin-left: -4px;
+    border-right: 1px solid var(--tooltip-border);
+    border-bottom: 1px solid var(--tooltip-border);
+    background: var(--tooltip-bg);
+    transform: rotate(45deg);
+}
+
+.tooltip.is-below::after {
+    top: auto;
+    bottom: 100%;
+    margin-top: 0;
+    margin-bottom: -5px;
+    border-right: 0;
+    border-bottom: 0;
+    border-top: 1px solid var(--tooltip-border);
+    border-left: 1px solid var(--tooltip-border);
+}
+
+@keyframes tooltip-in {
+    from {
+        opacity: 0;
+        transform: translateY(3px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+@keyframes tooltip-in-below {
+    from {
+        opacity: 0;
+        transform: translateY(-3px);
+    }
+
+    to {
+        opacity: 1;
+        transform: none;
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

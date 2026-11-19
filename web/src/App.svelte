@@ -11,10 +11,12 @@
     import ConfirmDialog from './components/ui/ConfirmDialog.svelte';
     import EmptyState from './components/ui/EmptyState.svelte';
     import Icon from './components/ui/Icon.svelte';
+    import TooltipLayer from './components/ui/TooltipLayer.svelte';
     import { EventStream } from './lib/events/event-stream';
     import { relativeTime } from './lib/format';
     import { currentRoute, navigate, startRouter, timelineURL } from './lib/router';
     import { claimAsPrimary, claimWindow, focusPrimaryWindow } from './lib/single-window';
+    import { tooltip } from './lib/tooltip.svelte';
     import type { Route } from './lib/router';
     import type { ConnectionState, Status, Worktree } from './lib/types';
 
@@ -511,7 +513,9 @@
                         class:active={activeOnly}
                         aria-pressed={activeOnly}
                         disabled={busy}
-                        title="Show only projects with uncommitted changes, upstream differences, or linked worktrees"
+                        use:tooltip={
+                            'Show only projects with uncommitted changes, upstream differences, or linked worktrees'
+                        }
                         onclick={toggleActiveOnly}
                     >
                         <Icon name="filter" size={14} />
@@ -654,6 +658,7 @@
 </div>
 
 <ConfirmDialog />
+<TooltipLayer />
 
 <style>
     .single-window {
