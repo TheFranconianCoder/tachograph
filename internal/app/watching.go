@@ -300,6 +300,18 @@ func (a *App) wakeWatcher(path string) {
 	a.watchers.Ensure(key, origin, paths)
 }
 
+// activateWorktree marks a worktree as active after the app itself wrote to it.
+// Such writes bypass the watcher, so a hibernated project would otherwise stay
+// cold until its next max-interval poll. Waking the watcher and triggering a
+// snapshot makes the change visible right away.
+func (a *App) activateWorktree(path string) {
+	a.markActive(path, time.Now())
+	a.wakeWatcher(path)
+	if a.supervisor != nil {
+		a.supervisor.Trigger(path)
+	}
+}
+
 // watchStateChanged maps a watcher process start/exit to the recorder state of
 // every worktree in the project.
 func (a *App) watchStateChanged(key string, running bool) {

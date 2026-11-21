@@ -461,6 +461,13 @@ func (a *App) handleRevert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// The revert wrote into the worktree directly, so a live watcher saw
+	// nothing and a hibernated one may be gone. Treat the change as ours:
+	// wake the watcher and record the snapshot now instead of on the next
+	// cold poll.
+	if len(result.Restored) > 0 || len(result.Deleted) > 0 {
+		a.activateWorktree(request.Path)
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 

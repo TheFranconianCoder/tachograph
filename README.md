@@ -251,8 +251,9 @@ maximum.
 
 Quiet projects hibernate: after `watcher.hibernateAfterMs` (default `300000`, `0` disables) without a
 snapshot, the watcher process stops and the project stays on the max poll. The next poll that finds a
-change writes the snapshot and starts the watcher again. At app start only projects with recent
-activity get a watcher immediately; the last activity comes from
+change writes the snapshot and starts the watcher again. A revert is handled like that change even
+though it bypasses the watcher: it triggers the snapshot and wakes a hibernated watcher immediately.
+At app start only projects with recent activity get a watcher immediately; the last activity comes from
 `$XDG_STATE_HOME/tachograph/activity.json`, or from the newest snapshot in the history store when the
 state file does not exist yet. A startup grace of the same length keeps those watchers open for up to
 five minutes.
@@ -383,7 +384,8 @@ Select one snapshot or a range and press **Revert** in the detail pane. With a f
 those files are reverted; without one, all files changed in the snapshot or range are reverted. The
 reverse of the selected change is written into the worktree: changed and deleted files are restored
 from the parent of the oldest selected snapshot, and files added in the selection are removed. Files
-outside the selection are kept, submodules are skipped, and the next snapshot records the revert.
+outside the selection are kept, submodules are skipped, and a snapshot is triggered immediately to
+record the revert.
 The diff is capped at 500 files and 256 KiB.
 
 Projects are listed in one column, newest change first. The filter above the list narrows by project
